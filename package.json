@@ -2,12 +2,15 @@
   "name": "pengbook",
   "private": true,
   "scripts": {
-    "dev:web": "pnpm --filter web dev",
-    "build:web": "pnpm --filter web build",
-    "lint:web": "pnpm --filter web lint",
-    "dev:api": "cd api && make run",
-    "test:api": "cd api && go test ./...",
-    "migrate:up": "cd api && make migrate-up",
-    "migrate:down": "cd api && make migrate-down"
+    "dev": "make dev",
+    "dev:infra": "make dev-infra",
+    "dev:api": "make dev-api",
+    "dev:web": "pnpm --filter pengbook-web dev",
+    "dev:down": "make dev-down",
+    "build:web": "pnpm --filter pengbook-web build",
+    "lint:web": "pnpm --filter pengbook-web lint",
+    "test:api": "make api-test",
+    "migrate:up": "make migrate-up",
+    "migrate:down": "make migrate-down"
   }
 }

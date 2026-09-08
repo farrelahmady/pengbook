@@ -1,0 +1,47 @@
+# Development infrastructure — postgres & redis only.
+# Application code runs on the host for instant hot reload.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   make dev          (starts API + Web locally)
+#
+# To stop:
+#   docker compose -f docker-compose.dev.yml down
+#   (data persists in volumes until explicitly removed)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pengbook-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-pengbook}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: pengbook-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
