@@ -1,0 +1,192 @@
+{
+	"number": {
+		"thousand": "Rb",
+		"million": "Jt",
+		"billion": "M",
+		"trillion": "T"
+	},
+	"journalPage": {
+		"title": "Buku Jurnal",
+		"listTitle": "Riwayat Transaksi",
+		"fab": "Buat Transaksi",
+		"summaryDebit": {
+			"label": "Total Debit"
+		},
+		"summaryCredit": {
+			"label": "Total Kredit"
+		},
+		"summarytransaction": {
+			"label": "Transaksi"
+		},
+		"transactionFilterChips": {
+			"all": "Semua",
+			"today": "Hari ini",
+			"week": "Minggu Ini",
+			"month": "Bulan Ini"
+		},
+		"filter": {
+			"dateRange": "Tanggal",
+			"coa": "Akun",
+			"clear": "Reset",
+			"selectDateRange": "Pilih Rentang Tanggal",
+			"from": "Dari",
+			"to": "Sampai",
+			"selectAccount": "Pilih Akun"
+		},
+		"emptyTitle": "Belum ada transaksi",
+		"emptyDescription": "Tap tombol Buat Transaksi untuk mencatat jurnal pertama Anda.",
+		"loadingMore": "Memuat lebih banyak jurnal...",
+		"download": {
+			"button": "Download Transaksi",
+			"toastLoading": "Mendownload transaksi...",
+			"toastSuccess": "Transaksi berhasil didownload",
+			"toastError": "Gagal mendownload transaksi"
+		},
+		"sheet": {
+			"title": "Buat Transaksi",
+			"editTitle": "Edit Transaksi",
+			"modes": {
+				"basic": "Basic",
+				"advanced": "Advanced",
+				"upload": "Upload"
+			}
+		},
+		"basic": {
+			"date": "Tanggal",
+			"description": "Deskripsi",
+			"descriptionPlaceholder": "Contoh: Beli tinta printer...",
+			"fromAccount": "Dari (Akun Kredit)",
+			"fromPlaceholder": "Pilih akun asal...",
+			"toAccount": "Ke (Akun Debit)",
+			"toPlaceholder": "Pilih akun tujuan...",
+			"amount": "Jumlah",
+			"hint": "Jurnal dibentuk otomatis:",
+			"hintDetail": "DR: Akun Ke | CR: Akun Dari",
+			"submit": "Simpan Transaksi",
+			"toastLoading": "Menyimpan transaksi...",
+			"toastSuccess": "Transaksi berhasil disimpan",
+			"toastError": "Gagal menyimpan transaksi",
+			"toastValidation": "Lengkapi semua field terlebih dahulu",
+			"toastSameAccount": "Akun asal dan tujuan tidak boleh sama"
+		},
+		"advanced": {
+			"date": "Tanggal",
+			"description": "Deskripsi",
+			"descriptionPlaceholder": "Deskripsi transaksi...",
+			"lines": "Baris Jurnal",
+			"account": "Akun",
+			"accountPlaceholder": "Pilih akun",
+			"debit": "Debit",
+			"credit": "Kredit",
+			"addRow": "Tambah Baris",
+			"balance": "Saldo Jurnal",
+			"balanced": "✓ Balance",
+			"submit": "Simpan Jurnal",
+			"toastLoading": "Menyimpan jurnal...",
+			"toastSuccess": "Jurnal berhasil disimpan",
+			"toastError": "Gagal menyimpan jurnal",
+			"toastUnbalanced": "Total debit harus sama dengan total kredit"
+		},
+		"upload": {
+			"title": "Upload File",
+			"description": "Upload file CSV atau Excel untuk menambahkan jurnal secara massal.",
+			"downloadTemplate": "Download Template",
+			"dragDrop": "Seret & lepas file di sini",
+			"or": "atau",
+			"browse": "Pilih File",
+			"acceptedFormats": "Format: CSV, XLSX (Max 5MB)",
+			"selectedFile": "File terpilih:",
+			"remove": "Hapus",
+			"submit": "Upload & Proses",
+			"toastLoading": "Mengupload file...",
+			"toastSuccess": "File berhasil diproses",
+			"toastError": "Gagal memproses file",
+			"toastNoFile": "Pilih file terlebih dahulu",
+			"toastInvalidFormat": "Format file tidak valid"
+		}
+	},
+	"assetPage": {
+		"title": "Daftar Aset",
+		"sectionTitle": "Kelompok Aset",
+		"summaryTotalAsset": {
+			"label": "Total Aset",
+			"sub": "akun aktif"
+		},
+		"summaryCurrentAsset": {
+			"label": "Aset Lancar",
+			"sub": "Kas + Bank"
+		},
+		"emptyTitle": "Belum ada aset",
+		"emptyDescription": "Tambahkan akun aset untuk mulai melacak kekayaan Anda."
+	},
+	"reportPage": {
+		"title": "Laporan Keuangan",
+		"sectionTitle": "Semua Laporan",
+		"summaryNetIncome": {
+			"label": "Laba Bersih",
+			"sub": "L/R periode ini"
+		},
+		"summaryTotalAsset": {
+			"label": "Total Aset",
+			"sub": "Neraca"
+		},
+		"summaryNetCashFlow": {
+			"label": "Arus Kas Bersih",
+			"sub": "Operasional"
+		},
+		"summaryTrialBalance": {
+			"label": "Trial Balance",
+			"sub": "DR = CR"
+		},
+		"emptyTitle": "Belum ada laporan",
+		"emptyDescription": "Data laporan akan muncul setelah Anda memiliki transaksi.",
+		"trialBalance": {
+			"name": "Trial Balance",
+			"subtitle": "Neraca Saldo",
+			"export": "Ekspor Excel",
+			"headers": {
+				"account": "Akun",
+				"debit": "Debit",
+				"credit": "Kredit"
+			}
+		},
+		"reports": {
+			"incomeStatement": {
+				"name": "Laba Rugi",
+				"subtitle": "Income Statement",
+				"total": "Laba Bersih"
+			},
+			"balanceSheet": {
+				"name": "Neraca",
+				"subtitle": "Balance Sheet",
+				"assets": "Aset",
+				"totalAssets": "Total Aset",
+				"liabilities": "Liabilitas & Ekuitas",
+				"totalLiabEquity": "Total Liabilitas & Ekuitas"
+			},
+			"cashFlow": {
+				"name": "Arus Kas",
+				"subtitle": "Cash Flow Statement",
+				"operating": "Operasional",
+				"investing": "Investasi",
+				"financing": "Pendanaan",
+				"total": "Arus Kas Bersih"
+			}
+		}
+	},
+	"coaPage": {
+		"title": "Bagan Akun",
+		"sectionTitle": "Perkiraan",
+		"summaryTotal": {
+			"label": "Total"
+		},
+		"summaryPosting": {
+			"label": "Posting"
+		},
+		"summaryHeader": {
+			"label": "Header"
+		},
+		"emptyTitle": "Belum ada akun",
+		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi."
+	}
+}

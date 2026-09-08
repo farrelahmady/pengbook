@@ -1,0 +1,192 @@
+{
+	"number": {
+		"thousand": "K",
+		"million": "M",
+		"billion": "B",
+		"trillion": "T"
+	},
+	"journalPage": {
+		"title": "Journal Book",
+		"listTitle": "Transaction History",
+		"fab": "New Transaction",
+		"summaryDebit": {
+			"label": "Total Debit"
+		},
+		"summaryCredit": {
+			"label": "Total Credit"
+		},
+		"summarytransaction": {
+			"label": "Transactions"
+		},
+		"transactionFilterChips": {
+			"all": "All",
+			"today": "Today",
+			"week": "This Week",
+			"month": "This Month"
+		},
+		"filter": {
+			"dateRange": "Date",
+			"coa": "Account",
+			"clear": "Reset",
+			"selectDateRange": "Select Date Range",
+			"from": "From",
+			"to": "To",
+			"selectAccount": "Select Account"
+		},
+		"emptyTitle": "No transactions yet",
+		"emptyDescription": "Tap the New Transaction button to record your first journal entry.",
+		"loadingMore": "Loading more journals...",
+		"download": {
+			"button": "Download Transactions",
+			"toastLoading": "Downloading transactions...",
+			"toastSuccess": "Transactions downloaded successfully",
+			"toastError": "Failed to download transactions"
+		},
+		"sheet": {
+			"title": "New Transaction",
+			"editTitle": "Edit Transaction",
+			"modes": {
+				"basic": "Basic",
+				"advanced": "Advanced",
+				"upload": "Upload"
+			}
+		},
+		"basic": {
+			"date": "Date",
+			"description": "Description",
+			"descriptionPlaceholder": "e.g. Buy printer ink...",
+			"fromAccount": "From (Credit Account)",
+			"fromPlaceholder": "Select source account...",
+			"toAccount": "To (Debit Account)",
+			"toPlaceholder": "Select destination account...",
+			"amount": "Amount",
+			"hint": "Journal is automatically created:",
+			"hintDetail": "DR: To Account | CR: From Account",
+			"submit": "Save Transaction",
+			"toastLoading": "Saving transaction...",
+			"toastSuccess": "Transaction saved successfully",
+			"toastError": "Failed to save transaction",
+			"toastValidation": "Please fill in all fields",
+			"toastSameAccount": "Source and destination accounts must be different"
+		},
+		"advanced": {
+			"date": "Date",
+			"description": "Description",
+			"descriptionPlaceholder": "Transaction description...",
+			"lines": "Journal Lines",
+			"account": "Account",
+			"accountPlaceholder": "Select account",
+			"debit": "Debit",
+			"credit": "Credit",
+			"addRow": "Add Line",
+			"balance": "Journal Balance",
+			"balanced": "✓ Balanced",
+			"submit": "Save Journal",
+			"toastLoading": "Saving journal...",
+			"toastSuccess": "Journal saved successfully",
+			"toastError": "Failed to save journal",
+			"toastUnbalanced": "Total debit must equal total credit"
+		},
+		"upload": {
+			"title": "Upload File",
+			"description": "Upload a CSV or Excel file to add journals in bulk.",
+			"downloadTemplate": "Download Template",
+			"dragDrop": "Drag & drop file here",
+			"or": "or",
+			"browse": "Choose File",
+			"acceptedFormats": "Format: CSV, XLSX (Max 5MB)",
+			"selectedFile": "Selected file:",
+			"remove": "Remove",
+			"submit": "Upload & Process",
+			"toastLoading": "Uploading file...",
+			"toastSuccess": "File processed successfully",
+			"toastError": "Failed to process file",
+			"toastNoFile": "Please select a file first",
+			"toastInvalidFormat": "Invalid file format"
+		}
+	},
+	"assetPage": {
+		"title": "Asset List",
+		"sectionTitle": "Asset Groups",
+		"summaryTotalAsset": {
+			"label": "Total Assets",
+			"sub": "active accounts"
+		},
+		"summaryCurrentAsset": {
+			"label": "Current Assets",
+			"sub": "Cash + Bank"
+		},
+		"emptyTitle": "No assets yet",
+		"emptyDescription": "Add asset accounts to start tracking your wealth."
+	},
+	"reportPage": {
+		"title": "Financial Reports",
+		"sectionTitle": "All Reports",
+		"summaryNetIncome": {
+			"label": "Net Income",
+			"sub": "P/L this period"
+		},
+		"summaryTotalAsset": {
+			"label": "Total Assets",
+			"sub": "Balance Sheet"
+		},
+		"summaryNetCashFlow": {
+			"label": "Net Cash Flow",
+			"sub": "Operating"
+		},
+		"summaryTrialBalance": {
+			"label": "Trial Balance",
+			"sub": "DR = CR"
+		},
+		"emptyTitle": "No reports yet",
+		"emptyDescription": "Reports will appear once you have transactions.",
+		"trialBalance": {
+			"name": "Trial Balance",
+			"subtitle": "Neraca Saldo",
+			"export": "Export Excel",
+			"headers": {
+				"account": "Account",
+				"debit": "Debit",
+				"credit": "Credit"
+			}
+		},
+		"reports": {
+			"incomeStatement": {
+				"name": "Income Statement",
+				"subtitle": "Laba Rugi",
+				"total": "Net Income"
+			},
+			"balanceSheet": {
+				"name": "Balance Sheet",
+				"subtitle": "Neraca",
+				"assets": "Assets",
+				"totalAssets": "Total Assets",
+				"liabilities": "Liabilities & Equity",
+				"totalLiabEquity": "Total Liabilities & Equity"
+			},
+			"cashFlow": {
+				"name": "Cash Flow",
+				"subtitle": "Arus Kas",
+				"operating": "Operating",
+				"investing": "Investing",
+				"financing": "Financing",
+				"total": "Net Cash Flow"
+			}
+		}
+	},
+	"coaPage": {
+		"title": "Chart of Accounts",
+		"sectionTitle": "Accounts",
+		"summaryTotal": {
+			"label": "Total"
+		},
+		"summaryPosting": {
+			"label": "Posting"
+		},
+		"summaryHeader": {
+			"label": "Header"
+		},
+		"emptyTitle": "No accounts yet",
+		"emptyDescription": "Add accounts to start recording transactions."
+	}
+}
