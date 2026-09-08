@@ -4,6 +4,8 @@
 # Usage:
 #   docker compose up -d --build
 
+name: pengbook
+
 services:
   # PostgreSQL Database
   postgres:

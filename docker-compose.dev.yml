@@ -9,10 +9,12 @@
 #   docker compose -f docker-compose.dev.yml down
 #   (data persists in volumes until explicitly removed)
 
+name: pengbook-dev
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: pengbook-db
+    container_name: pengbook-dev-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -30,7 +32,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: pengbook-redis
+    container_name: pengbook-dev-redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
