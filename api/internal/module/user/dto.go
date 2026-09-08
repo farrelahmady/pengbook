@@ -13,5 +13,5 @@ type UserResponse struct {
 	ID        int64  `json:"id"`         // User ID
 	Name      string `json:"name"`       // User name
 	Email     string `json:"email"`      // User email
-	CreatedAt string `json:"created_at"` // Creation time (RFC3339 format)
+	CreatedAt string `json:"createdAt"` // Creation time (RFC3339 format)
 }

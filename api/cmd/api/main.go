@@ -24,7 +24,9 @@ import (
 	"pengbook/api/internal/database"
 	"pengbook/api/internal/infrastructure/postgres"
 	"pengbook/api/internal/infrastructure/redis"
+	"pengbook/api/internal/module/account"
 	"pengbook/api/internal/module/auth"
+	"pengbook/api/internal/module/journal"
 	"pengbook/api/internal/module/user"
 	"pengbook/api/internal/server"
 	"pengbook/api/pkg/logger"
@@ -59,18 +61,29 @@ func main() {
 
 	txManager := postgres.NewTxManager(pool)
 	
+	// User module
 	userRepo := postgres.NewUserRepository(pool)
 	userSvc := user.NewService(userRepo, txManager)
 	userHandler := user.NewHandler(userSvc)
 	
+	// Auth module
 	authTokenRepo := redis.NewAuthTokenRepository(redisClient)
 	authSvc := auth.NewService(userRepo, authTokenRepo, txManager, cfg.JWT.Secret)
 	authHandler := auth.NewHandler(authSvc)
 
+	// Account module
+	accountRepo := postgres.NewAccountRepository(pool)
+	accountSvc := account.NewService(accountRepo, txManager)
+	accountHandler := account.NewHandler(accountSvc)
+
+	// Journal module
+	journalRepo := postgres.NewJournalRepository(pool)
+	journalSvc := journal.NewService(journalRepo, accountRepo, txManager)
+	journalHandler := journal.NewHandler(journalSvc)
+
 	log.Info("Connected to Redis", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
 
-
-	srv := server.NewHTTP(userHandler, authHandler, cfg.HTTPPort, log)
+	srv := server.NewHTTP(userHandler, authHandler, accountHandler, journalHandler, cfg.JWT.Secret, cfg.HTTPPort, log)
 
 	log.Info("Starting HTTP server", "url", fmt.Sprintf("http://localhost:%d", cfg.HTTPPort), "swagger", fmt.Sprintf("http://localhost:%d/swagger/index.html", cfg.HTTPPort))
 
@@ -78,5 +91,4 @@ func main() {
 		log.Error("http server", "error", err)
 		os.Exit(1)
 	}
-
 }

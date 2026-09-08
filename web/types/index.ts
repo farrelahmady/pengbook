@@ -16,12 +16,12 @@ export type AccountType =
 	| "OTHER";
 
 export interface ChartOfAccount {
-	id: string;
+	id: number;
 	code: string;
 	name: string;
 	type: AccountType;
 	isPosting: boolean;
-	parentId: string | null;
+	parentId: number | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -33,22 +33,21 @@ export interface ChartOfAccountWithChildren extends ChartOfAccount {
 export interface CreateCoaDto {
 	code: string;
 	name: string;
-	type: AccountType;
-	parentId?: string;
+	parentId?: number;
 }
 
 // Journal
 export interface JournalEntryLine {
-	id: string;
-	journalEntryId: string;
-	accountId: string;
-	debit: string;
-	credit: string;
+	id: number;
+	journalEntryId: number;
+	accountId: number;
+	debit: number;
+	credit: number;
 	account?: ChartOfAccount;
 }
 
 export interface JournalEntry {
-	id: string;
+	id: number;
 	date: string;
 	description: string | null;
 	lines: JournalEntryLine[];
@@ -57,7 +56,7 @@ export interface JournalEntry {
 }
 
 export interface JournalLineDto {
-	accountId: string;
+	accountId: number;
 	debit: number;
 	credit: number;
 }
@@ -79,7 +78,7 @@ export type NavTab = "jurnal" | "aset" | "laporan" | "akun";
 
 // Asset
 export interface AssetAccount {
-	id: string;
+	id: number;
 	code: string;
 	name: string;
 	balance: number;
@@ -87,7 +86,7 @@ export interface AssetAccount {
 }
 
 export interface AssetGroup {
-	id: string;
+	id: number;
 	code: string;
 	name: string;
 	icon: string;

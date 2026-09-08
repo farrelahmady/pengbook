@@ -19,7 +19,9 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 
 	inner "pengbook/api/internal/middleware"
+	"pengbook/api/internal/module/account"
 	"pengbook/api/internal/module/auth"
+	"pengbook/api/internal/module/journal"
 	"pengbook/api/internal/module/user"
 	"pengbook/api/pkg/response"
 
@@ -36,7 +38,7 @@ type HTTP struct {
 // Middleware chain: RequestID → RealIP → Recovery → Logger → Timeout.
 // Module routers are mounted under their versioned paths (e.g. /api/v1/users),
 // plus a /health endpoint for liveness checks.
-func NewHTTP(userHandler *user.Handler, authHandler *auth.Handler, port int, log *slog.Logger) *HTTP {
+func NewHTTP(userHandler *user.Handler, authHandler *auth.Handler, accountHandler *account.Handler, journalHandler *journal.Handler, jwtSecret string, port int, log *slog.Logger) *HTTP {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -53,11 +55,22 @@ func NewHTTP(userHandler *user.Handler, authHandler *auth.Handler, port int, log
 		r.Mount("/", authHandler.Routes())
 	})
 
+	// Protected routes (require JWT)
+	r.Route("/api/v1/accounts", func(r chi.Router) {
+		r.Use(inner.Auth(jwtSecret))
+		r.Mount("/", accountHandler.Routes())
+	})
+
+	r.Route("/api/v1/journals", func(r chi.Router) {
+		r.Use(inner.Auth(jwtSecret))
+		r.Mount("/", journalHandler.Routes())
+	})
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		response.Success(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-		// Swagger
+	// Swagger
 	r.Get("/swagger/*", httpSwagger.Handler())
 
 	return &HTTP{

@@ -30,10 +30,10 @@ type TokenClaims struct {
 }
 
 type AuthTokens struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-	TokenType    string `json:"token_type"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	ExpiresIn    int64  `json:"expiresIn"`
+	TokenType    string `json:"tokenType"`
 }
 
 type RefreshTokenData struct {
