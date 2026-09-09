@@ -2,12 +2,13 @@
 # All commands run from the project root.
 
 # Load .env file if exists (environment variables take precedence)
--include .env
+-include ./api/.env
 
 # Migration
 DB_DRIVER ?= postgres
 DB_STRING ?= "postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSLMODE)"
 MIGRATE_DIR ?= ./api/migrations
+SEED_DIR ?= ./api/seeders
 
 COMPOSE_DEV = docker compose -f docker-compose.dev.yml
 
@@ -20,6 +21,7 @@ COMPOSE_DEV = docker compose -f docker-compose.dev.yml
         swagger-gen \
         migrate-up migrate-down migrate-status migrate-create migrate-reset migrate-fix \
         db-reset \
+        seed-up seed-down seed-reset seed-status seed-create \
         clean
 
 # ──────────────────────────────────────────────
@@ -53,6 +55,9 @@ help:
 	@echo ""
 	@echo "Migrations:"
 	@grep -E '^## migrate-' $(MAKEFILE_LIST) | sed 's/## /  /'
+	@echo ""
+	@echo "Seeds:"
+	@grep -E '^## seed-' $(MAKEFILE_LIST) | sed 's/## /  /'
 	@echo ""
 	@echo "Database:"
 	@grep -E '^## db-' $(MAKEFILE_LIST) | sed 's/## /  /'
@@ -241,6 +246,27 @@ swagger-gen:
 db-reset:
 	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) reset
 	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) up
+
+## seed-up: Apply all pending seeds
+seed-up:
+	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) up
+
+## seed-down: Rollback the last seed
+seed-down:
+	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) down
+
+## seed-reset: Rollback all seeds
+seed-reset:
+	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) reset
+
+## seed-status: Show seed status
+seed-status:
+	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) status
+
+## seed-create: Create a new seed file (usage: make seed-create name=add_products)
+seed-create:
+	@if [ -z "$(name)" ]; then echo "Error: name is required. Usage: make seed-create name=add_products"; exit 1; fi
+	goose -dir $(SEED_DIR) create $(name) sql
 
 # ──────────────────────────────────────────────
 #  Clean

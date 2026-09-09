@@ -52,6 +52,14 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*TokenResp
 		return nil, ErrUserExists
 	}
 
+	existingUsername, err := s.userRepo.FindByEmailOrUsername(ctx, req.Username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing username: %w", err)
+	}
+	if existingUsername != nil {
+		return nil, ErrUserExists
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -59,6 +67,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*TokenResp
 
 	newUser := &user.User{
 		Name:         req.Name,
+		Username:     req.Username,
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
 	}
@@ -71,7 +80,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*TokenResp
 }
 
 func (s *service) Login(ctx context.Context, req LoginRequest) (*TokenResponse, error) {
-	existingUser, err := s.userRepo.FindByEmail(ctx, req.Email)
+	existingUser, err := s.userRepo.FindByEmailOrUsername(ctx, req.Identifier)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}

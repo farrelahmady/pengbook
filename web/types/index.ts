@@ -6,6 +6,34 @@ export interface ApiResponse<T> {
 	meta?: { timestamp: string; path?: string };
 }
 
+// Auth
+export interface User {
+	id: number;
+	name: string;
+	username: string;
+	email: string;
+	createdAt: string;
+}
+
+export interface TokenResponse {
+	accessToken: string;
+	refreshToken: string;
+	expiresIn: number;
+	tokenType: string;
+}
+
+export interface LoginRequest {
+	identifier: string;
+	password: string;
+}
+
+export interface RegisterRequest {
+	name: string;
+	username: string;
+	email: string;
+	password: string;
+}
+
 // COA
 export type AccountType =
 	| "ASSET"

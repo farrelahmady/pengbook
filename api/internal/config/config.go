@@ -47,12 +47,7 @@ type Config struct {
 // the .env file may be missing and the app must still work with OS env vars.
 // The test helper (testutil) looks up .env manually when needed.
 func LoadConfig() (*Config, error) {
-	// Try loading .env from current directory first, then from the parent
-	// directory (project root). This allows the API to run from api/ while
-	// keeping .env at the repo root for both web and API.
-	if err := godotenv.Load(); err != nil {
-		godotenv.Load("../.env")
-	}
+	godotenv.Load()
 
 	var cfg Config
 

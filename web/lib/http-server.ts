@@ -28,7 +28,7 @@ export async function serverHttpClient() {
 	> = [
 		loggerMiddleware(),
 		authMiddleware(async () => {
-			const token = (await cookies()).get("auth_token")?.value;
+			const token = (await cookies()).get("access_token")?.value;
 			return token || null;
 		}),
 	];

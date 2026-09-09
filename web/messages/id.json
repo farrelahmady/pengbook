@@ -188,5 +188,43 @@
 		},
 		"emptyTitle": "Belum ada akun",
 		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi."
+	},
+	"auth": {
+		"login": {
+			"title": "Masuk",
+			"subtitle": "Kelola keuangan Anda",
+			"identifier": "Email atau Username",
+			"identifierPlaceholder": "Masukkan email atau username",
+			"password": "Kata Sandi",
+			"passwordPlaceholder": "Masukkan kata sandi",
+			"submit": "Masuk",
+			"noAccount": "Belum punya akun?",
+			"registerLink": "Daftar",
+			"toastLoading": "Sedang masuk...",
+			"toastSuccess": "Berhasil masuk",
+			"toastError": "Gagal masuk",
+			"toastValidation": "Lengkapi semua field terlebih dahulu"
+		},
+		"register": {
+			"title": "Daftar Akun",
+			"subtitle": "Mulai catat keuangan Anda",
+			"name": "Nama Lengkap",
+			"namePlaceholder": "Masukkan nama lengkap",
+			"username": "Username",
+			"usernamePlaceholder": "Pilih username",
+			"email": "Email",
+			"emailPlaceholder": "Masukkan email",
+			"password": "Kata Sandi",
+			"passwordPlaceholder": "Buat kata sandi",
+			"passwordHint": "Minimal 8 karakter",
+			"submit": "Daftar",
+			"hasAccount": "Sudah punya akun?",
+			"loginLink": "Masuk",
+			"toastLoading": "Sedang mendaftar...",
+			"toastSuccess": "Berhasil mendaftar",
+			"toastError": "Gagal mendaftar",
+			"toastValidation": "Lengkapi semua field terlebih dahulu",
+			"toastPasswordMin": "Kata sandi minimal 8 karakter"
+		}
 	}
 }

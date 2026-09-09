@@ -37,30 +37,27 @@ func (r *userRepository) db(ctx context.Context) database.DBTX {
 
 // createUserQuery: INSERT + RETURNING so id/timestamps are filled by the DB.
 const createUserQuery = `
-	INSERT INTO users (name, email, password_hash)
-	VALUES ($1, $2, $3)
+	INSERT INTO users (name, username, email, password_hash)
+	VALUES ($1, $2, $3, $4)
 	RETURNING id, created_at, updated_at
 `
 
-// Create stores a new user. u.ID, u.CreatedAt, u.UpdatedAt are filled from DB.
 func (r *userRepository) Create(ctx context.Context, u *user.User) error {
-	return r.db(ctx).QueryRow(ctx, createUserQuery, u.Name, u.Email, u.PasswordHash).
+	return r.db(ctx).QueryRow(ctx, createUserQuery, u.Name, u.Username, u.Email, u.PasswordHash).
 		Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
 }
 
 // findByIDQuery: full SELECT of a single user row.
 const findByIDQuery = `
-	SELECT id, name, email, password_hash, created_at, updated_at
+	SELECT id, name, username, email, password_hash, created_at, updated_at
 	FROM users
 	WHERE id = $1
 `
 
-// FindByID returns the user for the given id.
-// When no row matches, returns (nil, nil) — not an error.
 func (r *userRepository) FindByID(ctx context.Context, id int64) (*user.User, error) {
 	var u user.User
 	err := r.db(ctx).QueryRow(ctx, findByIDQuery, id).
-		Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -72,17 +69,34 @@ func (r *userRepository) FindByID(ctx context.Context, id int64) (*user.User, er
 
 // findByEmailQuery: full SELECT of a single user row by email.
 const findByEmailQuery = `
-	SELECT id, name, email, password_hash, created_at, updated_at
+	SELECT id, name, username, email, password_hash, created_at, updated_at
 	FROM users
 	WHERE email = $1
 `
 
-// FindByEmail returns the user for the given email.
-// When no row matches, returns (nil, nil) — not an error.
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*user.User, error) {
 	var u user.User
 	err := r.db(ctx).QueryRow(ctx, findByEmailQuery, email).
-		Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+const findByEmailOrUsernameQuery = `
+	SELECT id, name, username, email, password_hash, created_at, updated_at
+	FROM users
+	WHERE email = $1 OR username = $1
+`
+
+func (r *userRepository) FindByEmailOrUsername(ctx context.Context, identifier string) (*user.User, error) {
+	var u user.User
+	err := r.db(ctx).QueryRow(ctx, findByEmailOrUsernameQuery, identifier).
+		Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

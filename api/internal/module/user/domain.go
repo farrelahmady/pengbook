@@ -6,12 +6,13 @@ import "time"
 
 // User is the user domain entity — a representation of a row in `users`.
 type User struct {
-	ID           int64     // Primary key (auto-increment from DB)
-	Name         string    // Full user name
-	Email        string    // Email (unique in the database)
-	PasswordHash string    // bcrypt hash of the password (never store plaintext)
-	CreatedAt    time.Time // Row creation time (filled by RETURNING from DB)
-	UpdatedAt    time.Time // Last modification time
+	ID           int64
+	Name         string
+	Username     string
+	Email        string
+	PasswordHash string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // AuditLog is an entity for recording user activity (table `user_audit_logs`).

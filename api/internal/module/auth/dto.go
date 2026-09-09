@@ -2,13 +2,14 @@ package auth
 
 type RegisterRequest struct {
 	Name     string `json:"name" example:"John Doe" validate:"required,min=3,max=100"`
+	Username string `json:"username" example:"johndoe" validate:"required,min=3,max=30,alphanum"`
 	Email    string `json:"email" example:"john.doe@example.com" validate:"required,email"`
 	Password string `json:"password" example:"password" validate:"required,min=8,max=72"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" example:"john.doe@example.com" validate:"required,email"`
-	Password string `json:"password" example:"password" validate:"required"`
+	Identifier string `json:"identifier" example:"johndoe or john@example.com" validate:"required"`
+	Password   string `json:"password" example:"password" validate:"required"`
 }
 
 type RefreshRequest struct {

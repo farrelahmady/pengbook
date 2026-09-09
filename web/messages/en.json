@@ -188,5 +188,43 @@
 		},
 		"emptyTitle": "No accounts yet",
 		"emptyDescription": "Add accounts to start recording transactions."
+	},
+	"auth": {
+		"login": {
+			"title": "Sign In",
+			"subtitle": "Manage your finances",
+			"identifier": "Email or Username",
+			"identifierPlaceholder": "Enter email or username",
+			"password": "Password",
+			"passwordPlaceholder": "Enter your password",
+			"submit": "Sign In",
+			"noAccount": "Don't have an account?",
+			"registerLink": "Sign Up",
+			"toastLoading": "Signing in...",
+			"toastSuccess": "Signed in successfully",
+			"toastError": "Failed to sign in",
+			"toastValidation": "Please fill in all fields"
+		},
+		"register": {
+			"title": "Create Account",
+			"subtitle": "Start tracking your finances",
+			"name": "Full Name",
+			"namePlaceholder": "Enter your full name",
+			"username": "Username",
+			"usernamePlaceholder": "Choose a username",
+			"email": "Email",
+			"emailPlaceholder": "Enter your email",
+			"password": "Password",
+			"passwordPlaceholder": "Create a password",
+			"passwordHint": "At least 8 characters",
+			"submit": "Sign Up",
+			"hasAccount": "Already have an account?",
+			"loginLink": "Sign In",
+			"toastLoading": "Creating account...",
+			"toastSuccess": "Account created successfully",
+			"toastError": "Failed to create account",
+			"toastValidation": "Please fill in all fields",
+			"toastPasswordMin": "Password must be at least 8 characters"
+		}
 	}
 }

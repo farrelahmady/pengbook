@@ -209,6 +209,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, http.StatusOK, user.UserResponse{
 		ID:        u.ID,
 		Name:      u.Name,
+		Username:  u.Username,
 		Email:     u.Email,
 		CreatedAt: u.CreatedAt.Format(time.RFC3339),
 	})

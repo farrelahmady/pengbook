@@ -43,6 +43,7 @@ func NewHTTP(userHandler *user.Handler, authHandler *auth.Handler, accountHandle
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(inner.CORS)
 	r.Use(inner.Recovery(log))
 	r.Use(inner.Logger(log))
 	r.Use(middleware.Timeout(15 * time.Second))

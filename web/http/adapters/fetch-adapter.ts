@@ -40,7 +40,9 @@ export async function fetchAdapter(config: HttpRequestConfig) {
 
 	// Serialize JSON bodies, pass other body types as-is
 	if (config.body !== undefined && config.body !== null) {
-		init.body = isJsonBody ? JSON.stringify(config.body) : (config.body as BodyInit);
+		init.body = isJsonBody
+			? JSON.stringify(config.body)
+			: (config.body as BodyInit);
 	}
 
 	const response = await fetch(config.url, init);
