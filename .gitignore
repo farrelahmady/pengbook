@@ -60,5 +60,8 @@ Thumbs.db
 *.swo
 *~
 
+# pnpm auto-generated
+web/pnpm-workspace.yaml
+
 # Misc
 *.pem

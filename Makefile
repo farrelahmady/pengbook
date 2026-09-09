@@ -88,7 +88,7 @@ dev-api:
 
 ## dev-web: Run Web locally (hot reload)
 dev-web:
-	cd web && pnpm dev
+	pnpm --filter pengbook-web dev
 
 ## dev-down: Stop infrastructure
 dev-down:
@@ -149,7 +149,7 @@ api-build:
 
 ## web-build: Build Next.js for production
 web-build:
-	cd web && pnpm build
+	pnpm --filter pengbook-web build
 
 # ──────────────────────────────────────────────
 #  Lint & Format
@@ -165,7 +165,7 @@ api-fmt:
 
 ## web-lint: Run ESLint on web code
 web-lint:
-	cd web && pnpm lint
+	pnpm --filter pengbook-web lint
 
 # ──────────────────────────────────────────────
 #  Docker Production
@@ -222,7 +222,7 @@ setup:
 		echo ".env already exists, skipping copy"; \
 	fi
 	cd api && go mod download
-	cd web && pnpm install
+	pnpm install
 	@echo "Setup complete!"
 
 # ──────────────────────────────────────────────
