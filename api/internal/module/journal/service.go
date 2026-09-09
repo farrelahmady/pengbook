@@ -59,13 +59,13 @@ func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter Lis
 	}
 
 	if filter.StartDate != "" {
-		t, err := time.Parse("2006-01-02", filter.StartDate)
+		t, err := time.Parse(time.RFC3339, filter.StartDate)
 		if err == nil {
 			entryFilter.StartDate = &t
 		}
 	}
 	if filter.EndDate != "" {
-		t, err := time.Parse("2006-01-02", filter.EndDate)
+		t, err := time.Parse(time.RFC3339, filter.EndDate)
 		if err == nil {
 			entryFilter.EndDate = &t
 		}
@@ -134,9 +134,9 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 	}
 
 	// Parse date
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := time.Parse(time.RFC3339, req.Date)
 	if err != nil {
-		return nil, errors.New("invalid date format, expected YYYY-MM-DD")
+		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
 	// Validate all accounts are posting accounts
@@ -216,9 +216,9 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 	}
 
 	// Parse date
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := time.Parse(time.RFC3339, req.Date)
 	if err != nil {
-		return nil, errors.New("invalid date format, expected YYYY-MM-DD")
+		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
 	// Validate all accounts are posting accounts
@@ -281,7 +281,7 @@ func toEntryResponse(e *JournalEntry) JournalEntryResponse {
 
 	return JournalEntryResponse{
 		ID:          e.ID,
-		Date:        e.Date.Format("2006-01-02"),
+		Date:        e.Date.Format(time.RFC3339),
 		Description: e.Description,
 		Lines:       lines,
 		CreatedAt:   e.CreatedAt.Format(time.RFC3339),

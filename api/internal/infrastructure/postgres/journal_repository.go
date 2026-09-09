@@ -29,7 +29,7 @@ func (r *journalRepository) db(ctx context.Context) database.DBTX {
 }
 
 const createEntryQuery = `
-	INSERT INTO journal_entries (user_id, date, description)
+	INSERT INTO journal_entries (user_id, datetime, description)
 	VALUES ($1, $2, $3)
 	RETURNING id, created_at, updated_at
 `
@@ -60,7 +60,7 @@ func (r *journalRepository) createLines(ctx context.Context, entryID int64, line
 }
 
 const findEntryByIDQuery = `
-	SELECT id, user_id, date, description, created_at, updated_at
+	SELECT id, user_id, datetime, description, created_at, updated_at
 	FROM journal_entries
 	WHERE id = $1
 `
@@ -175,7 +175,7 @@ func (r *journalRepository) DeleteEntry(ctx context.Context, id int64) error {
 
 const updateEntryQuery = `
 	UPDATE journal_entries
-	SET date = $2, description = $3, updated_at = NOW()
+	SET datetime = $2, description = $3, updated_at = NOW()
 	WHERE id = $1
 	RETURNING updated_at
 `
@@ -239,13 +239,13 @@ func (r *journalRepository) buildListQuery(userID int64, filter journal.EntryFil
 	argIdx := 2
 
 	if filter.StartDate != nil {
-		where = append(where, fmt.Sprintf("e.date >= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
 		argIdx++
 	}
 
 	if filter.EndDate != nil {
-		where = append(where, fmt.Sprintf("e.date <= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime <= $%d", argIdx))
 		args = append(args, *filter.EndDate)
 		argIdx++
 	}
@@ -264,10 +264,10 @@ func (r *journalRepository) buildListQuery(userID int64, filter journal.EntryFil
 	}
 
 	query := fmt.Sprintf(`
-		SELECT e.id, e.user_id, e.date, e.description, e.created_at, e.updated_at
+		SELECT e.id, e.user_id, e.datetime, e.description, e.created_at, e.updated_at
 		FROM journal_entries e
 		WHERE %s
-		ORDER BY e.date DESC, e.id DESC
+		ORDER BY e.datetime DESC, e.id DESC
 		LIMIT $%d OFFSET $%d
 	`, strings.Join(where, " AND "), argIdx, argIdx+1)
 
@@ -282,13 +282,13 @@ func (r *journalRepository) CountByUserIDWithFilter(ctx context.Context, userID 
 	argIdx := 2
 
 	if filter.StartDate != nil {
-		where = append(where, fmt.Sprintf("e.date >= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
 		argIdx++
 	}
 
 	if filter.EndDate != nil {
-		where = append(where, fmt.Sprintf("e.date <= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime <= $%d", argIdx))
 		args = append(args, *filter.EndDate)
 		argIdx++
 	}
@@ -323,13 +323,13 @@ func (r *journalRepository) SumDebitByUserIDWithFilter(ctx context.Context, user
 	argIdx := 2
 
 	if filter.StartDate != nil {
-		where = append(where, fmt.Sprintf("e.date >= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
 		argIdx++
 	}
 
 	if filter.EndDate != nil {
-		where = append(where, fmt.Sprintf("e.date <= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime <= $%d", argIdx))
 		args = append(args, *filter.EndDate)
 		argIdx++
 	}
@@ -365,13 +365,13 @@ func (r *journalRepository) SumCreditByUserIDWithFilter(ctx context.Context, use
 	argIdx := 2
 
 	if filter.StartDate != nil {
-		where = append(where, fmt.Sprintf("e.date >= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
 		argIdx++
 	}
 
 	if filter.EndDate != nil {
-		where = append(where, fmt.Sprintf("e.date <= $%d", argIdx))
+		where = append(where, fmt.Sprintf("e.datetime <= $%d", argIdx))
 		args = append(args, *filter.EndDate)
 		argIdx++
 	}

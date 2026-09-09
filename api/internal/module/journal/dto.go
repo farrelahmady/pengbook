@@ -2,14 +2,14 @@ package journal
 
 // CreateJournalRequest is the DTO payload for POST /journals.
 type CreateJournalRequest struct {
-	Date        string          `json:"date" example:"2026-04-21" validate:"required"`
+	Date        string          `json:"date" example:"2026-04-21T10:30:00+07:00" validate:"required"`
 	Description string          `json:"description,omitempty"`
 	Lines       []JournalLineDto `json:"lines" validate:"required,min=2"`
 }
 
 // UpdateJournalRequest is the DTO payload for PUT /journals/{id}.
 type UpdateJournalRequest struct {
-	Date        string          `json:"date" example:"2026-04-21" validate:"required"`
+	Date        string          `json:"date" example:"2026-04-21T10:30:00+07:00" validate:"required"`
 	Description string          `json:"description,omitempty"`
 	Lines       []JournalLineDto `json:"lines" validate:"required,min=2"`
 }
@@ -63,8 +63,8 @@ type JournalSummary struct {
 type ListRequest struct {
 	Page       int     `json:"page"`
 	Limit      int     `json:"limit"`
-	StartDate  string  `json:"startDate,omitempty"`
-	EndDate    string  `json:"endDate,omitempty"`
+	StartDate  string  `json:"startDate,omitempty" example:"2026-01-01T00:00:00+07:00"`
+	EndDate    string  `json:"endDate,omitempty" example:"2026-12-31T23:59:59+07:00"`
 	AccountIDs []int64 `json:"accountIds,omitempty"`
 }
 

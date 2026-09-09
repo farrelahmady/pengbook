@@ -9,6 +9,8 @@ DB_DRIVER ?= postgres
 DB_STRING ?= "postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSLMODE)"
 MIGRATE_DIR ?= ./api/migrations
 SEED_DIR ?= ./api/seeders
+GOOSE_MIGRATION_TABLE ?= goose_db_version
+GOOSE_SEED_TABLE ?= goose_seed_version
 
 COMPOSE_DEV = docker compose -f docker-compose.dev.yml
 
@@ -121,15 +123,15 @@ api-test:
 
 ## migrate-up: Apply all pending migrations
 migrate-up:
-	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) up
+	goose -dir $(MIGRATE_DIR) -table $(GOOSE_MIGRATION_TABLE) $(DB_DRIVER) $(DB_STRING) up
 
 ## migrate-down: Rollback the last migration
 migrate-down:
-	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) down
+	goose -dir $(MIGRATE_DIR) -table $(GOOSE_MIGRATION_TABLE) $(DB_DRIVER) $(DB_STRING) down
 
 ## migrate-status: Show migration status
 migrate-status:
-	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) status
+	goose -dir $(MIGRATE_DIR) -table $(GOOSE_MIGRATION_TABLE) $(DB_DRIVER) $(DB_STRING) status
 
 ## migrate-create: Create a new migration file (usage: make migrate-create name=add_posts)
 migrate-create:
@@ -138,7 +140,7 @@ migrate-create:
 
 ## migrate-reset: Rollback all migrations
 migrate-reset:
-	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) reset
+	goose -dir $(MIGRATE_DIR) -table $(GOOSE_MIGRATION_TABLE) $(DB_DRIVER) $(DB_STRING) reset
 
 ## migrate-fix: Apply sequential ordering to migrations
 migrate-fix:
@@ -243,25 +245,23 @@ swagger-gen:
 # ──────────────────────────────────────────────
 
 ## db-reset: Full database reset (rollback all, then re-apply)
-db-reset:
-	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) reset
-	goose -dir $(MIGRATE_DIR) $(DB_DRIVER) $(DB_STRING) up
+db-reset: seed-reset migrate-reset migrate-up
 
 ## seed-up: Apply all pending seeds
 seed-up:
-	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) up
+	goose -dir $(SEED_DIR) -table $(GOOSE_SEED_TABLE) $(DB_DRIVER) $(DB_STRING) up
 
 ## seed-down: Rollback the last seed
 seed-down:
-	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) down
+	goose -dir $(SEED_DIR) -table $(GOOSE_SEED_TABLE) $(DB_DRIVER) $(DB_STRING) down
 
 ## seed-reset: Rollback all seeds
 seed-reset:
-	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) reset
+	goose -dir $(SEED_DIR) -table $(GOOSE_SEED_TABLE) $(DB_DRIVER) $(DB_STRING) reset
 
 ## seed-status: Show seed status
 seed-status:
-	goose -dir $(SEED_DIR) $(DB_DRIVER) $(DB_STRING) status
+	goose -dir $(SEED_DIR) -table $(GOOSE_SEED_TABLE) $(DB_DRIVER) $(DB_STRING) status
 
 ## seed-create: Create a new seed file (usage: make seed-create name=add_products)
 seed-create:
