@@ -1,5 +1,5 @@
 "use client";
-import { JournalEntry } from "@/types";
+import { JournalEntryListItem } from "@/types";
 import { JournalCard, JournalCardSkeleton } from "./journal-card";
 import { EditJournalSheet } from "./edit-journal-sheet";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -8,6 +8,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { journalService } from "@/services/journal";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 
 interface JournalScrollViewProps {
 	startDate?: Date;
@@ -15,10 +17,10 @@ interface JournalScrollViewProps {
 	accountIds?: string[];
 }
 
-function groupByDate(journals: JournalEntry[]) {
-	const map = new Map<string, JournalEntry[]>();
+function groupByDate(journals: JournalEntryListItem[]) {
+	const map = new Map<string, JournalEntryListItem[]>();
 	for (const j of journals) {
-		const key = j.date.slice(0, 10);
+		const key = j.datetime.slice(0, 10);
 		if (!map.has(key)) map.set(key, []);
 		map.get(key)!.push(j);
 	}
@@ -31,34 +33,44 @@ export function JournalScrollView({
 	accountIds,
 }: JournalScrollViewProps) {
 	const observerRef = useRef<HTMLDivElement>(null);
+	const { getToken } = useAuth();
 	const LIMIT = 3;
-	const [selectedJournal, setSelectedJournal] = useState<JournalEntry | null>(
-		null,
-	);
+	const [selectedJournal, setSelectedJournal] =
+		useState<JournalEntryListItem | null>(null);
 	const [editOpen, setEditOpen] = useState(false);
 
-	const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
-		useInfiniteQuery({
-			queryKey: ["journals", "scroll-view", { startDate, endDate, accountIds }],
-			queryFn: ({ pageParam }) => {
-				return journalService.getAllScrollView({
-					page: pageParam,
+	const {
+		data,
+		fetchNextPage,
+		hasNextPage,
+		isFetchingNextPage,
+		isLoading,
+		isError,
+		error,
+	} = useInfiniteQuery({
+		queryKey: ["journals", "scroll-view", { startDate, endDate, accountIds }],
+		queryFn: ({ pageParam }) => {
+			return journalService.getAllScrollView(
+				{
 					limit: LIMIT,
+					cursor: pageParam,
 					startDate,
 					endDate,
 					accountIds,
-				});
-			},
-			initialPageParam: 1,
-			getNextPageParam: (lastPage, allPages) => {
-				if (!lastPage || lastPage.length < LIMIT) return undefined;
-				return allPages.length + 1;
-			},
-		});
+				},
+				getToken,
+			);
+		},
+		initialPageParam: undefined as string | undefined,
+		getNextPageParam: (lastPage) => {
+			return lastPage.nextCursor ?? undefined;
+		},
+		retry: false,
+	});
 
 	const journals = useMemo(() => {
 		if (!data) return [];
-		return data.pages.flat();
+		return data.pages.flatMap((page) => page.data);
 	}, [data]);
 
 	const grouped = useMemo(() => groupByDate(journals), [journals]);
@@ -66,7 +78,12 @@ export function JournalScrollView({
 	useEffect(() => {
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+				if (
+					entries[0].isIntersecting &&
+					hasNextPage &&
+					!isFetchingNextPage &&
+					!isError
+				) {
 					fetchNextPage();
 				}
 			},
@@ -81,9 +98,17 @@ export function JournalScrollView({
 		}
 
 		return () => observer.disconnect();
-	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+	}, [hasNextPage, isFetchingNextPage, fetchNextPage, isError]);
 
-	function handleJournalClick(journal: JournalEntry) {
+	// useEffect(() => {
+	// 	if (isError) {
+	// 		toast.error(
+	// 			`Failed to load journals. ${error instanceof Error ? error.message : "Unknown error"}`,
+	// 		);
+	// 	}
+	// }, [isError, error]);
+
+	function handleJournalClick(journal: JournalEntryListItem) {
 		setSelectedJournal(journal);
 		setEditOpen(true);
 	}
@@ -119,23 +144,17 @@ function JournalScrollViewContent({
 	onJournalClick,
 }: {
 	isLoading: boolean;
-	journals: JournalEntry[];
-	grouped: Map<string, JournalEntry[]>;
+	journals: JournalEntryListItem[];
+	grouped: Map<string, JournalEntryListItem[]>;
 	isFetchingNextPage: boolean;
 	observerRef: React.RefObject<HTMLDivElement | null>;
-	onJournalClick: (journal: JournalEntry) => void;
+	onJournalClick: (journal: JournalEntryListItem) => void;
 }) {
 	const format = useFormatter();
 	const t = useTranslations("journalPage");
 
 	if (isLoading) {
-		return (
-			<div className="flex flex-col gap-2">
-				{Array.from({ length: 3 }).map((_, i) => (
-					<JournalCardSkeleton key={i} />
-				))}
-			</div>
-		);
+		return <JournalScrollViewSkeletons />;
 	}
 
 	if (journals.length === 0) {
@@ -171,12 +190,18 @@ function JournalScrollViewContent({
 					</div>
 				</div>
 			))}
-			{isFetchingNextPage && (
-				<p className="text-center text-[12px] text-secondary-400 py-2">
-					{t("loadingMore")}
-				</p>
-			)}
+			{isFetchingNextPage && <JournalScrollViewSkeletons />}
 			<div ref={observerRef} className="h-1" />
 		</>
+	);
+}
+
+function JournalScrollViewSkeletons() {
+	return (
+		<div className="flex flex-col gap-2">
+			{Array.from({ length: 3 }).map((_, i) => (
+				<JournalCardSkeleton key={i} />
+			))}
+		</div>
 	);
 }

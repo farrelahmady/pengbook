@@ -61,6 +61,19 @@ func CalculateOrderTotal(items []OrderItem, discountRate float64) OrderSummary {
 }
 ```
 
+```typescript
+// ❌ FRONTEND — TIDAK BOLEH (raw fetch)
+const response = await fetch(`${API_BASE}/journals`);
+const result = await response.json();
+
+// ✅ FRONTEND — BOLEH (gunakan http-client)
+import { createHttpClient } from "@/lib/http-client";
+
+const client = createHttpClient(getToken);
+const res = await client.get<ApiResponse<JournalEntryListResponse>>(`/api/v1/journals`);
+return res.data.data;
+```
+
 ---
 
 ## Agent Guidelines
@@ -71,6 +84,7 @@ func CalculateOrderTotal(items []OrderItem, discountRate float64) OrderSummary {
 2. **Gunakan data yang sudah diproses** —召 response dari API, jangan hitung ulang
 3. **Fokus di UI/UX** — component structure, styling, user interaction
 4. **Jika butuh data baru** — minta buat endpoint API baru, bukan kalkulasi di frontend
+5. **Gunakan http-client untuk API calls** — gunakan `createHttpClient()` dari `@/lib/http-client`, jangan raw `fetch()`. Ini memberikan benefit: auth middleware, logging, retry, dan error handling yang konsisten
 
 ### Ketika Bekerja di `api/` (Backend)
 

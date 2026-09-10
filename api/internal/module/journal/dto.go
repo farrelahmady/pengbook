@@ -1,5 +1,7 @@
 package journal
 
+import "time"
+
 // CreateJournalRequest is the DTO payload for POST /journals.
 type CreateJournalRequest struct {
 	Date        string          `json:"date" example:"2026-04-21T10:30:00+07:00" validate:"required"`
@@ -59,19 +61,34 @@ type JournalSummary struct {
 	TransactionCount int64   `json:"transactionCount"`
 }
 
-// ListRequest is the query parameters for listing journal entries.
+// ListRequest is the query parameters for listing journal entries (cursor-based).
 type ListRequest struct {
-	Page       int     `json:"page"`
 	Limit      int     `json:"limit"`
+	Cursor     *string `json:"cursor,omitempty"`
 	StartDate  string  `json:"startDate,omitempty" example:"2026-01-01T00:00:00+07:00"`
 	EndDate    string  `json:"endDate,omitempty" example:"2026-12-31T23:59:59+07:00"`
 	AccountIDs []int64 `json:"accountIds,omitempty"`
 }
 
-// ListResponse is the paginated list response for journal entries.
-type ListResponse struct {
-	Entries []JournalEntryResponse `json:"entries"`
-	Total   int64                  `json:"total"`
-	Page    int                    `json:"page"`
-	Limit   int                    `json:"limit"`
+// CursorPageResponse is the paginated list response with cursor for journal entries.
+type CursorPageResponse struct {
+	Data       []JournalEntryListItem `json:"data"`
+	NextCursor *string                `json:"nextCursor"`
+}
+
+// JournalEntryListItem is the DTO for list view (optimized for UI display).
+type JournalEntryListItem struct {
+	ID          int64             `json:"id"`
+	Datetime    time.Time            `json:"datetime"`
+	Description string            `json:"description"`
+	NetEffect   float64           `json:"netEffect"`
+	Lines       []JournalLineItem `json:"lines"`
+}
+
+// JournalLineItem is a single line in journal entry list view.
+type JournalLineItem struct {
+	ID             int64   `json:"id"`
+	Debit          float64 `json:"debit"`
+	Credit         float64 `json:"credit"`
+	AccountDisplay string  `json:"accountDisplay"`
 }

@@ -7,7 +7,7 @@ import {
 	RegisterRequest,
 } from "@/types";
 
-function authClient(getToken: () => Promise<string | null>) {
+function authClient(getToken?: () => Promise<string | null>) {
 	return createHttpClient(getToken);
 }
 
@@ -30,11 +30,8 @@ export const authService = {
 	/**
 	 * Login with email and password.
 	 */
-	login: async (
-		data: LoginRequest,
-		getToken?: () => Promise<string | null>,
-	): Promise<TokenResponse> => {
-		const client = authClient(getToken || (async () => null));
+	login: async (data: LoginRequest): Promise<TokenResponse> => {
+		const client = authClient();
 		const res = await client.post<ApiResponse<TokenResponse>>(
 			"/api/v1/auth/login",
 			data,
@@ -46,7 +43,7 @@ export const authService = {
 	 * Refresh access token using a refresh token.
 	 */
 	refresh: async (refreshToken: string): Promise<TokenResponse> => {
-		const client = authClient(async () => null);
+		const client = authClient();
 		const res = await client.post<ApiResponse<TokenResponse>>(
 			"/api/v1/auth/refresh",
 			{ refreshToken },
@@ -58,7 +55,7 @@ export const authService = {
 	 * Logout (revoke refresh token).
 	 */
 	logout: async (refreshToken: string): Promise<void> => {
-		const client = authClient(async () => null);
+		const client = authClient();
 		await client.post<ApiResponse<{ message: string }>>("/api/v1/auth/logout", {
 			refreshToken,
 		});

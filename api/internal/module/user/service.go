@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"pengbook/api/internal/database"
+	"pengbook/api/pkg/logger"
 )
 
 // ErrNotFound indicates the user was not found.
@@ -48,8 +49,11 @@ func NewService(repo Repository, tx database.TxManager) Service {
 //  3. Inside the transaction: insert the user, then insert the audit log.
 //     If either fails → everything is rolled back.
 func (s *service) Create(ctx context.Context, req CreateUserRequest) (*UserResponse, error) {
+	log := logger.FromContext(ctx)
+
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
+		log.Error("user create: failed to hash password", "error", err)
 		return nil, err
 	}
 
@@ -66,17 +70,22 @@ func (s *service) Create(ctx context.Context, req CreateUserRequest) (*UserRespo
 		return s.repo.InsertAuditLog(ctx, &AuditLog{UserID: u.ID, Action: "user.created"})
 	})
 	if err != nil {
+		log.Error("user create: failed to create user", "email", req.Email, "error", err)
 		return nil, err
 	}
 
+	log.Info("user created", "user_id", u.ID, "email", u.Email)
 	return toResponse(u), nil
 }
 
 // GetByID returns a user. A read operation — no transaction needed; the
 // repository automatically uses the regular connection.
 func (s *service) GetByID(ctx context.Context, id int64) (*UserResponse, error) {
+	log := logger.FromContext(ctx)
+
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		log.Error("user GetByID: failed to find user", "user_id", id, "error", err)
 		return nil, err
 	}
 	if u == nil {

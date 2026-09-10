@@ -11,6 +11,7 @@ import (
 
 	"pengbook/api/internal/database"
 	"pengbook/api/internal/module/journal"
+	"pengbook/api/pkg/logger"
 )
 
 type journalRepository struct {
@@ -41,9 +42,14 @@ const createLineQuery = `
 `
 
 func (r *journalRepository) CreateEntry(ctx context.Context, entry *journal.JournalEntry) error {
-	return r.db(ctx).QueryRow(ctx, createEntryQuery,
+	log := logger.FromContext(ctx)
+	err := r.db(ctx).QueryRow(ctx, createEntryQuery,
 		entry.UserID, entry.Date, entry.Description,
 	).Scan(&entry.ID, &entry.CreatedAt, &entry.UpdatedAt)
+	if err != nil {
+		log.Error("repo: failed to create journal entry", "user_id", entry.UserID, "error", err)
+	}
+	return err
 }
 
 func (r *journalRepository) createLines(ctx context.Context, entryID int64, lines []journal.JournalEntryLine) error {
@@ -75,6 +81,7 @@ const findLinesByEntryIDQuery = `
 `
 
 func (r *journalRepository) FindEntryByID(ctx context.Context, id int64) (*journal.JournalEntry, error) {
+	log := logger.FromContext(ctx)
 	var entry journal.JournalEntry
 	err := r.db(ctx).QueryRow(ctx, findEntryByIDQuery, id).
 		Scan(&entry.ID, &entry.UserID, &entry.Date, &entry.Description, &entry.CreatedAt, &entry.UpdatedAt)
@@ -82,12 +89,14 @@ func (r *journalRepository) FindEntryByID(ctx context.Context, id int64) (*journ
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		log.Error("repo: failed to find journal entry by id", "entry_id", id, "error", err)
 		return nil, err
 	}
 
 	// Fetch lines with account info
 	rows, err := r.db(ctx).Query(ctx, findLinesByEntryIDQuery, id)
 	if err != nil {
+		log.Error("repo: failed to find journal lines by entry id", "entry_id", id, "error", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -161,15 +170,158 @@ func (r *journalRepository) FindEntriesByUserID(ctx context.Context, userID int6
 	return entries, rows.Err()
 }
 
+func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context, userID int64, filter journal.EntryFilter) ([]journal.JournalEntryListItem, error) {
+	where := []string{"e.user_id = $1"}
+	args := []interface{}{userID}
+	argIdx := 2
+
+	// Cursor filter
+	if filter.CursorDatetime != nil && filter.CursorID != nil {
+		where = append(where, fmt.Sprintf("(e.datetime, e.id) < ($%d, $%d)", argIdx, argIdx+1))
+		args = append(args, *filter.CursorDatetime, *filter.CursorID)
+		argIdx += 2
+	}
+
+	// Date range filters
+	if filter.StartDate != nil {
+		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
+		args = append(args, *filter.StartDate)
+		argIdx++
+	}
+	if filter.EndDate != nil {
+		where = append(where, fmt.Sprintf("e.datetime <= $%d", argIdx))
+		args = append(args, *filter.EndDate)
+		argIdx++
+	}
+
+	// Account filter
+	if len(filter.AccountIDs) > 0 {
+		placeholders := make([]string, len(filter.AccountIDs))
+		for i, id := range filter.AccountIDs {
+			placeholders[i] = fmt.Sprintf("$%d", argIdx)
+			args = append(args, id)
+			argIdx++
+		}
+		where = append(where, fmt.Sprintf(
+			"e.id IN (SELECT journal_entry_id FROM journal_entry_lines WHERE account_id IN (%s))",
+			strings.Join(placeholders, ","),
+		))
+	}
+
+	whereClause := strings.Join(where, " AND ")
+
+	// Query 1: Get aggregated entries with net effect
+	entryQuery := fmt.Sprintf(`
+		SELECT 
+			e.id,
+			e.datetime,
+			e.description,
+			COALESCE(SUM(CASE WHEN a.type = 'ASSET' THEN l.debit ELSE 0 END), 0) -
+			COALESCE(SUM(CASE WHEN a.type = 'ASSET' THEN l.credit ELSE 0 END), 0) AS net_effect
+		FROM journal_entries e
+		LEFT JOIN journal_entry_lines l ON l.journal_entry_id = e.id
+		LEFT JOIN accounts a ON a.id = l.account_id
+		WHERE %s
+		GROUP BY e.id, e.datetime, e.description
+		ORDER BY e.datetime DESC, e.id DESC
+		LIMIT $%d
+	`, whereClause, argIdx)
+
+	log := logger.FromContext(ctx)
+	log.Info("repo: FindEntriesByUserIDWithNetEffect query", "query", entryQuery, "args", args)
+
+	args = append(args, filter.Limit)
+
+	rows, err := r.db(ctx).Query(ctx, entryQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]journal.JournalEntryListItem, 0)
+	entryIDs := make([]int64, 0)
+
+	for rows.Next() {
+		var entry journal.JournalEntryListItem
+		if err := rows.Scan(&entry.ID, &entry.Datetime, &entry.Description, &entry.NetEffect); err != nil {
+			return nil, err
+		}
+		entry.Lines = make([]journal.JournalLineItem, 0)
+		entries = append(entries, entry)
+		entryIDs = append(entryIDs, entry.ID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(entryIDs) == 0 {
+		return entries, nil
+	}
+
+	// Query 2: Get lines for all entries
+	placeholders := make([]string, len(entryIDs))
+	lineArgs := make([]interface{}, len(entryIDs))
+	for i, id := range entryIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		lineArgs[i] = id
+	}
+
+	lineQuery := fmt.Sprintf(`
+		SELECT 
+			l.journal_entry_id,
+			l.id,
+			l.debit,
+			l.credit,
+			a.code || ' · ' || a.name AS account_display
+		FROM journal_entry_lines l
+		JOIN accounts a ON a.id = l.account_id
+		WHERE l.journal_entry_id IN (%s)
+		ORDER BY l.journal_entry_id, l.id
+	`, strings.Join(placeholders, ","))
+
+	lineRows, err := r.db(ctx).Query(ctx, lineQuery, lineArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer lineRows.Close()
+
+	// Map entry ID to index
+	entryMap := make(map[int64]int)
+	for i, entry := range entries {
+		entryMap[entry.ID] = i
+	}
+
+	for lineRows.Next() {
+		var entryID int64
+		var line journal.JournalLineItem
+		if err := lineRows.Scan(&entryID, &line.ID, &line.Debit, &line.Credit, &line.AccountDisplay); err != nil {
+			return nil, err
+		}
+		if idx, ok := entryMap[entryID]; ok {
+			entries[idx].Lines = append(entries[idx].Lines, line)
+		}
+	}
+	if err := lineRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
 const deleteEntryLinesQuery = `DELETE FROM journal_entry_lines WHERE journal_entry_id = $1`
 const deleteEntryQuery = `DELETE FROM journal_entries WHERE id = $1`
 
 func (r *journalRepository) DeleteEntry(ctx context.Context, id int64) error {
+	log := logger.FromContext(ctx)
 	_, err := r.db(ctx).Exec(ctx, deleteEntryLinesQuery, id)
 	if err != nil {
+		log.Error("repo: failed to delete journal entry lines", "entry_id", id, "error", err)
 		return err
 	}
 	_, err = r.db(ctx).Exec(ctx, deleteEntryQuery, id)
+	if err != nil {
+		log.Error("repo: failed to delete journal entry", "entry_id", id, "error", err)
+	}
 	return err
 }
 
@@ -181,9 +333,12 @@ const updateEntryQuery = `
 `
 
 func (r *journalRepository) UpdateEntry(ctx context.Context, entry *journal.JournalEntry) error {
+	log := logger.FromContext(ctx)
+
 	// Delete existing lines
 	_, err := r.db(ctx).Exec(ctx, deleteEntryLinesQuery, entry.ID)
 	if err != nil {
+		log.Error("repo: failed to delete journal entry lines", "entry_id", entry.ID, "error", err)
 		return err
 	}
 
@@ -192,11 +347,17 @@ func (r *journalRepository) UpdateEntry(ctx context.Context, entry *journal.Jour
 		entry.ID, entry.Date, entry.Description,
 	).Scan(&entry.UpdatedAt)
 	if err != nil {
+		log.Error("repo: failed to update journal entry", "entry_id", entry.ID, "error", err)
 		return err
 	}
 
 	// Create new lines
-	return r.createLines(ctx, entry.ID, entry.Lines)
+	if err := r.createLines(ctx, entry.ID, entry.Lines); err != nil {
+		log.Error("repo: failed to create journal entry lines", "entry_id", entry.ID, "error", err)
+		return err
+	}
+
+	return nil
 }
 
 const journalCountByUserIDQuery = `SELECT COUNT(*) FROM journal_entries WHERE user_id = $1`
@@ -238,6 +399,13 @@ func (r *journalRepository) buildListQuery(userID int64, filter journal.EntryFil
 	args := []interface{}{userID}
 	argIdx := 2
 
+	// Cursor filter
+	if filter.CursorDatetime != nil && filter.CursorID != nil {
+		where = append(where, fmt.Sprintf("(e.datetime, e.id) < ($%d, $%d)", argIdx, argIdx+1))
+		args = append(args, *filter.CursorDatetime, *filter.CursorID)
+		argIdx += 2
+	}
+
 	if filter.StartDate != nil {
 		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
@@ -268,10 +436,10 @@ func (r *journalRepository) buildListQuery(userID int64, filter journal.EntryFil
 		FROM journal_entries e
 		WHERE %s
 		ORDER BY e.datetime DESC, e.id DESC
-		LIMIT $%d OFFSET $%d
-	`, strings.Join(where, " AND "), argIdx, argIdx+1)
+		LIMIT $%d
+	`, strings.Join(where, " AND "), argIdx)
 
-	args = append(args, filter.Limit, (filter.Page-1)*filter.Limit)
+	args = append(args, filter.Limit)
 
 	return query, args
 }
@@ -280,6 +448,12 @@ func (r *journalRepository) CountByUserIDWithFilter(ctx context.Context, userID 
 	where := []string{"e.user_id = $1"}
 	args := []interface{}{userID}
 	argIdx := 2
+
+	if filter.CursorDatetime != nil && filter.CursorID != nil {
+		where = append(where, fmt.Sprintf("(e.datetime, e.id) < ($%d, $%d)", argIdx, argIdx+1))
+		args = append(args, *filter.CursorDatetime, *filter.CursorID)
+		argIdx += 2
+	}
 
 	if filter.StartDate != nil {
 		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
@@ -322,6 +496,12 @@ func (r *journalRepository) SumDebitByUserIDWithFilter(ctx context.Context, user
 	args := []interface{}{userID}
 	argIdx := 2
 
+	if filter.CursorDatetime != nil && filter.CursorID != nil {
+		where = append(where, fmt.Sprintf("(e.datetime, e.id) < ($%d, $%d)", argIdx, argIdx+1))
+		args = append(args, *filter.CursorDatetime, *filter.CursorID)
+		argIdx += 2
+	}
+
 	if filter.StartDate != nil {
 		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
@@ -363,6 +543,12 @@ func (r *journalRepository) SumCreditByUserIDWithFilter(ctx context.Context, use
 	where := []string{"e.user_id = $1"}
 	args := []interface{}{userID}
 	argIdx := 2
+
+	if filter.CursorDatetime != nil && filter.CursorID != nil {
+		where = append(where, fmt.Sprintf("(e.datetime, e.id) < ($%d, $%d)", argIdx, argIdx+1))
+		args = append(args, *filter.CursorDatetime, *filter.CursorID)
+		argIdx += 2
+	}
 
 	if filter.StartDate != nil {
 		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))

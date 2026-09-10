@@ -1,31 +1,19 @@
 "use client";
 
-import { JournalEntry } from "@/types";
-import { formatTime, parseDecimal } from "@/lib/utils";
+import { JournalEntryListItem } from "@/types";
+import { formatTime } from "@/lib/utils";
 import { DrBadge, CrBadge, DrCrDot } from "@/components/shared/dbcr-badge";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "../ui/skeleton";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 
 interface JournalCardProps {
-	journal: JournalEntry;
+	journal: JournalEntryListItem;
 	onClick?: () => void;
 }
 
 export function JournalCard({ journal, onClick }: JournalCardProps) {
 	const currencyFormat = useCurrencyFormatter();
-	// Hitung total debit utama untuk tampilan amount
-	const totalDebit = journal.lines.reduce(
-		(s, l) => s + parseDecimal(l.debit),
-		0,
-	);
-	const totalCredit = journal.lines.reduce(
-		(s, l) => s + parseDecimal(l.credit),
-		0,
-	);
-	// Jika lebih banyak kredit, ini transaksi masuk
-	const isInflow = totalCredit > totalDebit;
-	const displayAmount = Math.max(totalDebit, totalCredit);
 
 	return (
 		<div
@@ -39,18 +27,20 @@ export function JournalCard({ journal, onClick }: JournalCardProps) {
 						{journal.description ?? "—"}
 					</p>
 					<p className="font-mono text-[10px] text-secondary-400 mt-0.5">
-						{formatTime(journal.date)}
+						{formatTime(journal.datetime)}
 					</p>
 				</div>
 				<div className="text-right shrink-0">
 					<p
 						className={cn(
 							"font-mono text-[15px] font-semibold",
-							isInflow ? "text-success-600" : "text-danger-600",
+							journal.netEffect >= 0 ? "text-success-600" : "text-danger-600",
 						)}
 					>
-						{isInflow ? "+" : "-"}
-						{currencyFormat(displayAmount, { compact: true })}
+						{currencyFormat(journal.netEffect, {
+							compact: true,
+							showSign: true,
+						})}
 					</p>
 				</div>
 			</div>
@@ -58,10 +48,8 @@ export function JournalCard({ journal, onClick }: JournalCardProps) {
 			{/* Lines */}
 			<div className="border-t border-black/[0.06] px-4 py-2.5 flex flex-col gap-2">
 				{journal.lines.map((line) => {
-					const isDr = parseDecimal(line.debit) > 0;
-					const amount = isDr
-						? parseDecimal(line.debit)
-						: parseDecimal(line.credit);
+					const isDr = line.debit > 0;
+					const amount = isDr ? line.debit : line.credit;
 					return (
 						<div
 							key={line.id}
@@ -70,7 +58,7 @@ export function JournalCard({ journal, onClick }: JournalCardProps) {
 							<div className="flex items-center gap-2 min-w-0">
 								<DrCrDot type={isDr ? "dr" : "cr"} />
 								<span className="text-[12px] text-secondary-500 truncate">
-									{line.account?.code} · {line.account?.name}
+									{line.accountDisplay}
 								</span>
 							</div>
 							<div className="flex items-center gap-1.5 shrink-0">

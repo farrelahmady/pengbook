@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"pengbook/api/pkg/logger"
 )
 
 type contextKey string
@@ -72,6 +74,11 @@ func Auth(secret string) func(http.Handler) http.Handler {
 			}
 
 			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
+
+			// Enrich request-scoped logger with user_id
+			reqLog := logger.FromContext(r.Context())
+			ctx = logger.WithContext(ctx, reqLog.With("user_id", claims.UserID))
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

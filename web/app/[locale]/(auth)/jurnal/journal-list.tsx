@@ -9,7 +9,7 @@ const QUICK_FILTERS = ["all", "today", "week", "month"] as const;
 
 export default function JournalList() {
 	const t = useTranslations("journalPage");
-	const [activeQuickFilter, setActiveQuickFilter] = useState<string>("today");
+	const [activeQuickFilter, setActiveQuickFilter] = useState<string>("all");
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
 	const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
@@ -23,9 +23,7 @@ export default function JournalList() {
 		if (hasCustomDate) {
 			return {
 				startDate: dateFrom ? new Date(dateFrom) : undefined,
-				endDate: dateTo
-					? new Date(dateTo + "T23:59:59.999")
-					: undefined,
+				endDate: dateTo ? new Date(dateTo + "T23:59:59.999") : undefined,
 			};
 		}
 
@@ -194,7 +192,7 @@ export default function JournalList() {
 			)}
 
 			{/* ── COA multi-select ── */}
-			{showCoaPicker && (
+			{/* {showCoaPicker && (
 				<div className="px-4 pb-3">
 					<div className="card-default shadow-card p-3 max-h-60 overflow-y-auto">
 						<p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 mb-2">
@@ -253,7 +251,7 @@ export default function JournalList() {
 						</div>
 					</div>
 				</div>
-			)}
+			)} */}
 
 			{/* ── List ── */}
 			<div className="px-1">
@@ -261,7 +259,9 @@ export default function JournalList() {
 				<JournalScrollView
 					startDate={startDate}
 					endDate={endDate}
-					accountIds={selectedAccountIds.length > 0 ? selectedAccountIds : undefined}
+					accountIds={
+						selectedAccountIds.length > 0 ? selectedAccountIds : undefined
+					}
 				/>
 			</div>
 		</>

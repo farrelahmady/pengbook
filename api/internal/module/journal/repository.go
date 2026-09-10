@@ -18,6 +18,9 @@ type Repository interface {
 	// FindEntriesByUserID returns paginated journal entries for a user.
 	FindEntriesByUserID(ctx context.Context, userID int64, filter EntryFilter) ([]JournalEntry, error)
 
+	// FindEntriesByUserIDWithNetEffect returns journal entries with net effect calculation (for list view).
+	FindEntriesByUserIDWithNetEffect(ctx context.Context, userID int64, filter EntryFilter) ([]JournalEntryListItem, error)
+
 	// UpdateEntry updates a journal entry and replaces its lines.
 	UpdateEntry(ctx context.Context, entry *JournalEntry) error
 
@@ -45,9 +48,10 @@ type Repository interface {
 
 // EntryFilter contains filter options for listing journal entries.
 type EntryFilter struct {
-	Page      int       `json:"page"`
-	Limit     int       `json:"limit"`
-	StartDate *time.Time `json:"start_date,omitempty"`
-	EndDate   *time.Time `json:"end_date,omitempty"`
-	AccountIDs []int64   `json:"account_ids,omitempty"`
+	Limit           int        `json:"limit"`
+	CursorDatetime  *time.Time `json:"cursor_datetime,omitempty"`
+	CursorID        *int64     `json:"cursor_id,omitempty"`
+	StartDate       *time.Time `json:"start_date,omitempty"`
+	EndDate         *time.Time `json:"end_date,omitempty"`
+	AccountIDs      []int64    `json:"account_ids,omitempty"`
 }

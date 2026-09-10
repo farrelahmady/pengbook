@@ -3,10 +3,13 @@ package journal
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"pengbook/api/internal/database"
 	"pengbook/api/internal/module/account"
+	"pengbook/api/pkg/logger"
 )
 
 // Errors
@@ -19,8 +22,8 @@ var (
 
 // Service is the PORT (interface) for journal business logic.
 type Service interface {
-	// GetAllScrollView returns paginated journal entries with filters.
-	GetAllScrollView(ctx context.Context, userID int64, filter ListRequest) (*ListResponse, error)
+	// GetAllScrollView returns paginated journal entries with cursor-based pagination.
+	GetAllScrollView(ctx context.Context, userID int64, filter ListRequest) (*CursorPageResponse, error)
 
 	// GetTotalSummary returns aggregate totals for a user.
 	GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error)
@@ -42,22 +45,39 @@ func NewService(repo Repository, accountRepo account.Repository, tx database.TxM
 	return &service{repo: repo, accountRepo: accountRepo, tx: tx}
 }
 
-func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter ListRequest) (*ListResponse, error) {
-	page := filter.Page
-	if page < 1 {
-		page = 1
-	}
+func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter ListRequest) (*CursorPageResponse, error) {
+	log := logger.FromContext(ctx)
+
 	limit := filter.Limit
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
 
 	entryFilter := EntryFilter{
-		Page:       page,
 		Limit:      limit,
 		AccountIDs: filter.AccountIDs,
 	}
 
+	// Parse cursor
+	if filter.Cursor != nil && *filter.Cursor != "" {
+		parts := strings.SplitN(*filter.Cursor, "_", 2)
+		if len(parts) == 2 {
+			t, err := time.Parse("2006-01-02T15:04:05.000Z", parts[0])
+			if err == nil {
+				entryFilter.CursorDatetime = &t
+			}else {
+				log.Warn("journal GetAllScrollView: failed to parse cursor datetime", "cursor", *filter.Cursor, "error", err)
+			}
+			id, err := strconv.ParseInt(parts[1], 10, 64)
+			if err == nil {
+				entryFilter.CursorID = &id
+			} else {
+				log.Warn("journal GetAllScrollView: failed to parse cursor ID", "cursor", *filter.Cursor, "error", err)
+			}
+		}
+	}
+
+	// Parse date filters
 	if filter.StartDate != "" {
 		t, err := time.Parse(time.RFC3339, filter.StartDate)
 		if err == nil {
@@ -71,42 +91,44 @@ func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter Lis
 		}
 	}
 
-	entries, err := s.repo.FindEntriesByUserID(ctx, userID, entryFilter)
+	entries, err := s.repo.FindEntriesByUserIDWithNetEffect(ctx, userID, entryFilter)
 	if err != nil {
+		log.Error("journal GetAllScrollView: failed to fetch entries", "user_id", userID, "error", err)
 		return nil, err
 	}
 
-	total, err := s.repo.CountByUserIDWithFilter(ctx, userID, entryFilter)
-	if err != nil {
-		return nil, err
+	// Build next cursor
+	var nextCursor *string
+	if len(entries) == limit {
+		last := entries[len(entries)-1]
+		cursor := last.Datetime.UTC().Format("2006-01-02T15:04:05.000Z") + "_" + strconv.FormatInt(last.ID, 10)
+		nextCursor = &cursor
 	}
 
-	result := make([]JournalEntryResponse, len(entries))
-	for i, e := range entries {
-		result[i] = toEntryResponse(&e)
-	}
-
-	return &ListResponse{
-		Entries: result,
-		Total:   total,
-		Page:    page,
-		Limit:   limit,
+	return &CursorPageResponse{
+		Data:       entries,
+		NextCursor: nextCursor,
 	}, nil
 }
 
 func (s *service) GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error) {
+	log := logger.FromContext(ctx)
+
 	totalDebit, err := s.repo.SumDebitByUserID(ctx, userID)
 	if err != nil {
+		log.Error("journal GetTotalSummary: failed to sum debit", "user_id", userID, "error", err)
 		return nil, err
 	}
 
 	totalCredit, err := s.repo.SumCreditByUserID(ctx, userID)
 	if err != nil {
+		log.Error("journal GetTotalSummary: failed to sum credit", "user_id", userID, "error", err)
 		return nil, err
 	}
 
 	count, err := s.repo.CountByUserID(ctx, userID)
 	if err != nil {
+		log.Error("journal GetTotalSummary: failed to count entries", "user_id", userID, "error", err)
 		return nil, err
 	}
 
@@ -118,8 +140,11 @@ func (s *service) GetTotalSummary(ctx context.Context, userID int64) (*JournalSu
 }
 
 func (s *service) Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error) {
+	log := logger.FromContext(ctx)
+
 	// Validate lines
 	if len(req.Lines) < 2 {
+		log.Warn("journal create: invalid lines", "user_id", userID, "line_count", len(req.Lines))
 		return nil, ErrInvalidLines
 	}
 
@@ -130,12 +155,14 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 		totalCredit += l.Credit
 	}
 	if totalDebit != totalCredit {
+		log.Warn("journal create: not balanced", "user_id", userID, "debit", totalDebit, "credit", totalCredit)
 		return nil, ErrNotBalanced
 	}
 
 	// Parse date
 	date, err := time.Parse(time.RFC3339, req.Date)
 	if err != nil {
+		log.Warn("journal create: invalid date", "user_id", userID, "date", req.Date)
 		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
@@ -143,15 +170,19 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 	for _, l := range req.Lines {
 		acc, err := s.accountRepo.FindByID(ctx, l.AccountID)
 		if err != nil {
+			log.Error("journal create: failed to find account", "user_id", userID, "account_id", l.AccountID, "error", err)
 			return nil, err
 		}
 		if acc == nil {
+			log.Warn("journal create: account not found", "user_id", userID, "account_id", l.AccountID)
 			return nil, errors.New("account not found")
 		}
 		if acc.UserID != userID {
+			log.Warn("journal create: account not owned by user", "user_id", userID, "account_id", l.AccountID)
 			return nil, errors.New("account not found")
 		}
 		if !acc.CanPost() {
+			log.Warn("journal create: not a posting account", "user_id", userID, "account_id", l.AccountID, "level", acc.Level)
 			return nil, ErrNotPostingAccount
 		}
 	}
@@ -175,33 +206,42 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 
 	err = s.repo.CreateEntry(ctx, entry)
 	if err != nil {
+		log.Error("journal create: failed to create entry", "user_id", userID, "error", err)
 		return nil, err
 	}
 
 	// Fetch the full entry with account info
 	created, err := s.repo.FindEntryByID(ctx, entry.ID)
 	if err != nil {
+		log.Error("journal create: failed to fetch created entry", "user_id", userID, "entry_id", entry.ID, "error", err)
 		return nil, err
 	}
 
+	log.Info("journal created", "user_id", userID, "entry_id", entry.ID, "line_count", len(req.Lines))
 	resp := toEntryResponse(created)
 	return &resp, nil
 }
 
 func (s *service) Update(ctx context.Context, userID int64, entryID int64, req UpdateJournalRequest) (*JournalEntryResponse, error) {
+	log := logger.FromContext(ctx)
+
 	existing, err := s.repo.FindEntryByID(ctx, entryID)
 	if err != nil {
+		log.Error("journal update: failed to find entry", "user_id", userID, "entry_id", entryID, "error", err)
 		return nil, err
 	}
 	if existing == nil {
+		log.Warn("journal update: entry not found", "user_id", userID, "entry_id", entryID)
 		return nil, ErrNotFound
 	}
 	if existing.UserID != userID {
+		log.Warn("journal update: entry not owned by user", "user_id", userID, "entry_id", entryID)
 		return nil, ErrNotFound
 	}
 
 	// Validate lines
 	if len(req.Lines) < 2 {
+		log.Warn("journal update: invalid lines", "user_id", userID, "entry_id", entryID, "line_count", len(req.Lines))
 		return nil, ErrInvalidLines
 	}
 
@@ -212,12 +252,14 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		totalCredit += l.Credit
 	}
 	if totalDebit != totalCredit {
+		log.Warn("journal update: not balanced", "user_id", userID, "entry_id", entryID, "debit", totalDebit, "credit", totalCredit)
 		return nil, ErrNotBalanced
 	}
 
 	// Parse date
 	date, err := time.Parse(time.RFC3339, req.Date)
 	if err != nil {
+		log.Warn("journal update: invalid date", "user_id", userID, "entry_id", entryID, "date", req.Date)
 		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
@@ -225,15 +267,19 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 	for _, l := range req.Lines {
 		acc, err := s.accountRepo.FindByID(ctx, l.AccountID)
 		if err != nil {
+			log.Error("journal update: failed to find account", "user_id", userID, "account_id", l.AccountID, "error", err)
 			return nil, err
 		}
 		if acc == nil {
+			log.Warn("journal update: account not found", "user_id", userID, "account_id", l.AccountID)
 			return nil, errors.New("account not found")
 		}
 		if acc.UserID != userID {
+			log.Warn("journal update: account not owned by user", "user_id", userID, "account_id", l.AccountID)
 			return nil, errors.New("account not found")
 		}
 		if !acc.CanPost() {
+			log.Warn("journal update: not a posting account", "user_id", userID, "account_id", l.AccountID, "level", acc.Level)
 			return nil, ErrNotPostingAccount
 		}
 	}
@@ -254,15 +300,18 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 
 	err = s.repo.UpdateEntry(ctx, existing)
 	if err != nil {
+		log.Error("journal update: failed to update entry", "user_id", userID, "entry_id", entryID, "error", err)
 		return nil, err
 	}
 
 	// Fetch the full entry with account info
 	updated, err := s.repo.FindEntryByID(ctx, entryID)
 	if err != nil {
+		log.Error("journal update: failed to fetch updated entry", "user_id", userID, "entry_id", entryID, "error", err)
 		return nil, err
 	}
 
+	log.Info("journal updated", "user_id", userID, "entry_id", entryID, "line_count", len(req.Lines))
 	resp := toEntryResponse(updated)
 	return &resp, nil
 }

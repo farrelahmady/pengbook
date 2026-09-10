@@ -83,6 +83,27 @@ export interface JournalEntry {
 	updatedAt: string;
 }
 
+// Journal List View (optimized for UI display)
+export interface JournalEntryListItem {
+	id: number;
+	datetime: string;
+	description: string | null;
+	netEffect: number;
+	lines: JournalLineItem[];
+}
+
+export interface JournalLineItem {
+	id: number;
+	debit: number;
+	credit: number;
+	accountDisplay: string;
+}
+
+export interface JournalEntryListResponse {
+	data: JournalEntryListItem[];
+	nextCursor: string | null;
+}
+
 export interface JournalLineDto {
 	accountId: number;
 	debit: number;

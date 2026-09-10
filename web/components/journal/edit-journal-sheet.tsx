@@ -6,10 +6,10 @@ import { EditBasicForm } from "./edit-basic-form";
 import { EditAdvancedForm } from "./edit-advanced-form";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
-import { JournalEntry } from "@/types";
+import { JournalEntryListItem } from "@/types";
 
 interface EditJournalSheetProps {
-	journal: JournalEntry | null;
+	journal: JournalEntryListItem | null;
 	open: boolean;
 	onOpenChange: (v: boolean) => void;
 }

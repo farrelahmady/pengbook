@@ -42,8 +42,8 @@ func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse query parameters
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	cursor := r.URL.Query().Get("cursor")
 	startDate := r.URL.Query().Get("startDate")
 	endDate := r.URL.Query().Get("endDate")
 
@@ -58,8 +58,8 @@ func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := ListRequest{
-		Page:       page,
 		Limit:      limit,
+		Cursor:     &cursor,
 		StartDate:  startDate,
 		EndDate:    endDate,
 		AccountIDs: accountIDs,

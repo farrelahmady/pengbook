@@ -125,7 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	/** Try to refresh access token using the refresh token */
 	const tryRefresh = useCallback(async (): Promise<boolean> => {
 		const refreshToken = getRefreshToken();
-		if (!refreshToken) return false;
+		if (!refreshToken) {
+			router.push("/login");
+			return false;
+		}
 
 		try {
 			const tokens = await authService.refresh(refreshToken);
@@ -133,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			return true;
 		} catch {
 			clearTokens();
+			router.push("/login");
 			return false;
 		}
 	}, []);
@@ -145,10 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	 */
 	const getToken = useCallback(async (): Promise<string | null> => {
 		let token = getAccessToken();
-		if (!token) return null;
 
 		// Token expired or expiring soon → refresh
-		if (isTokenExpiringSoon(token)) {
+		if (!token || isTokenExpiringSoon(token)) {
 			const refreshed = await tryRefresh();
 			if (refreshed) {
 				token = getAccessToken(); // Get new token
@@ -196,7 +199,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		}
 
 		init();
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, [fetchUser, tryRefresh]);
 
 	// ── Proactive refresh (safety-net interval) ────────────

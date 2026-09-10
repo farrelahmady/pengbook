@@ -5,22 +5,35 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+
+	"pengbook/api/pkg/logger"
 )
 
 // Logger returns a chi middleware that logs every HTTP request (method, path,
 // status code, and duration).
 //
-// A statusWriter wraps the ResponseWriter so the real status code can be
-// captured even when the handler does not call WriteHeader explicitly.
+// It enriches the logger with the request ID from chi's RequestID middleware
+// and stores the request-scoped logger in context so that downstream handlers,
+// services, and repositories can use logger.FromContext(ctx) to get a logger
+// with request_id (and later user_id) automatically attached.
 func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 
-			next.ServeHTTP(sw, r)
+			// Create request-scoped logger with request_id
+			reqID := chiMiddleware.GetReqID(r.Context())
+			reqLog := log.With("request_id", reqID)
 
-			log.Info("http request",
+			// Store in context for downstream use (service, repository)
+			ctx := logger.WithContext(r.Context(), reqLog)
+
+			next.ServeHTTP(sw, r.WithContext(ctx))
+
+			reqLog.Info("http request",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", sw.status,

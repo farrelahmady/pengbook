@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"pengbook/api/internal/database"
+	"pengbook/api/pkg/logger"
 )
 
 // Errors
@@ -80,6 +81,8 @@ func (s *service) GetSummary(ctx context.Context, userID int64) (*CoaSummary, er
 }
 
 func (s *service) Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error) {
+	log := logger.FromContext(ctx)
+
 	a := &Account{
 		UserID:   userID,
 		Code:     req.Code,
@@ -103,15 +106,20 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateAccountReq
 		})
 	})
 	if err != nil {
+		log.Error("account create: failed to create account", "user_id", userID, "code", req.Code, "error", err)
 		return nil, err
 	}
 
+	log.Info("account created", "user_id", userID, "account_id", a.ID, "code", a.Code, "name", a.Name)
 	return toResponse(created), nil
 }
 
 func (s *service) Update(ctx context.Context, userID int64, accountID int64, req UpdateAccountRequest) (*AccountResponse, error) {
+	log := logger.FromContext(ctx)
+
 	existing, err := s.repo.FindByID(ctx, accountID)
 	if err != nil {
+		log.Error("account update: failed to find account", "user_id", userID, "account_id", accountID, "error", err)
 		return nil, err
 	}
 	if existing == nil {
@@ -141,15 +149,20 @@ func (s *service) Update(ctx context.Context, userID int64, accountID int64, req
 		})
 	})
 	if err != nil {
+		log.Error("account update: failed to update account", "user_id", userID, "account_id", accountID, "error", err)
 		return nil, err
 	}
 
+	log.Info("account updated", "user_id", userID, "account_id", accountID, "name", existing.Name)
 	return toResponse(existing), nil
 }
 
 func (s *service) Delete(ctx context.Context, userID int64, accountID int64) error {
+	log := logger.FromContext(ctx)
+
 	existing, err := s.repo.FindByID(ctx, accountID)
 	if err != nil {
+		log.Error("account delete: failed to find account", "user_id", userID, "account_id", accountID, "error", err)
 		return err
 	}
 	if existing == nil {
@@ -159,7 +172,7 @@ func (s *service) Delete(ctx context.Context, userID int64, accountID int64) err
 		return ErrNotFound
 	}
 
-	return s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		// Audit log before delete
 		if err := s.repo.InsertAuditLog(ctx, &AccountAuditLog{
 			UserID:    userID,
@@ -172,6 +185,13 @@ func (s *service) Delete(ctx context.Context, userID int64, accountID int64) err
 
 		return s.repo.Delete(ctx, accountID)
 	})
+	if err != nil {
+		log.Error("account delete: failed to delete account", "user_id", userID, "account_id", accountID, "error", err)
+		return err
+	}
+
+	log.Info("account deleted", "user_id", userID, "account_id", accountID, "code", existing.Code, "name", existing.Name)
+	return nil
 }
 
 func (s *service) GetPostingAccounts(ctx context.Context, userID int64) ([]PostingAccountResponse, error) {

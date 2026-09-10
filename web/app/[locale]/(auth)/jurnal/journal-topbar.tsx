@@ -11,14 +11,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth-context";
 
 export default function JournalTopbar() {
+	const { getToken } = useAuth();
 	const t = useTranslations("journalPage");
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
 	const { data, isLoading } = useQuery({
 		queryKey: ["journalSummary"],
-		queryFn: () => journalService.getTotalSummary(),
+		queryFn: () => journalService.getTotalSummary(getToken),
 	});
 
 	const labelPeriod = format.dateTime(new Date(), {
@@ -29,7 +31,7 @@ export default function JournalTopbar() {
 	async function handleDownload() {
 		const toastId = toast.loading(t("download.toastLoading"));
 		try {
-			await journalService.downloadTransactions();
+			// await journalService.downloadTransactions();
 			toast.success(t("download.toastSuccess"), { id: toastId });
 		} catch {
 			toast.error(t("download.toastError"), { id: toastId });

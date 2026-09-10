@@ -9,6 +9,7 @@ import (
 
 	"pengbook/api/internal/database"
 	"pengbook/api/internal/module/user"
+	"pengbook/api/pkg/logger"
 )
 
 // userRepository is the pgx implementation of the user.Repository port.
@@ -43,8 +44,13 @@ const createUserQuery = `
 `
 
 func (r *userRepository) Create(ctx context.Context, u *user.User) error {
-	return r.db(ctx).QueryRow(ctx, createUserQuery, u.Name, u.Username, u.Email, u.PasswordHash).
+	log := logger.FromContext(ctx)
+	err := r.db(ctx).QueryRow(ctx, createUserQuery, u.Name, u.Username, u.Email, u.PasswordHash).
 		Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		log.Error("repo: failed to create user", "email", u.Email, "error", err)
+	}
+	return err
 }
 
 // findByIDQuery: full SELECT of a single user row.
@@ -55,6 +61,7 @@ const findByIDQuery = `
 `
 
 func (r *userRepository) FindByID(ctx context.Context, id int64) (*user.User, error) {
+	log := logger.FromContext(ctx)
 	var u user.User
 	err := r.db(ctx).QueryRow(ctx, findByIDQuery, id).
 		Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
@@ -62,6 +69,7 @@ func (r *userRepository) FindByID(ctx context.Context, id int64) (*user.User, er
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		log.Error("repo: failed to find user by id", "user_id", id, "error", err)
 		return nil, err
 	}
 	return &u, nil
@@ -75,6 +83,7 @@ const findByEmailQuery = `
 `
 
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*user.User, error) {
+	log := logger.FromContext(ctx)
 	var u user.User
 	err := r.db(ctx).QueryRow(ctx, findByEmailQuery, email).
 		Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
@@ -82,6 +91,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*user.U
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		log.Error("repo: failed to find user by email", "email", email, "error", err)
 		return nil, err
 	}
 	return &u, nil
@@ -94,6 +104,7 @@ const findByEmailOrUsernameQuery = `
 `
 
 func (r *userRepository) FindByEmailOrUsername(ctx context.Context, identifier string) (*user.User, error) {
+	log := logger.FromContext(ctx)
 	var u user.User
 	err := r.db(ctx).QueryRow(ctx, findByEmailOrUsernameQuery, identifier).
 		Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
@@ -101,6 +112,7 @@ func (r *userRepository) FindByEmailOrUsername(ctx context.Context, identifier s
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		log.Error("repo: failed to find user by email or username", "identifier", identifier, "error", err)
 		return nil, err
 	}
 	return &u, nil
@@ -115,6 +127,11 @@ const insertAuditLogQuery = `
 
 // InsertAuditLog records a user action into the audit table.
 func (r *userRepository) InsertAuditLog(ctx context.Context, audit *user.AuditLog) error {
-	return r.db(ctx).QueryRow(ctx, insertAuditLogQuery, audit.UserID, audit.Action).
+	log := logger.FromContext(ctx)
+	err := r.db(ctx).QueryRow(ctx, insertAuditLogQuery, audit.UserID, audit.Action).
 		Scan(&audit.ID, &audit.CreatedAt)
+	if err != nil {
+		log.Error("repo: failed to insert user audit log", "user_id", audit.UserID, "action", audit.Action, "error", err)
+	}
+	return err
 }
