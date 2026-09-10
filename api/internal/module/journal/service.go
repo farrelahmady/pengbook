@@ -114,29 +114,13 @@ func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter Lis
 func (s *service) GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error) {
 	log := logger.FromContext(ctx)
 
-	totalDebit, err := s.repo.SumDebitByUserID(ctx, userID)
+	summary, err := s.repo.GetSummaryByUserID(ctx, userID)
 	if err != nil {
-		log.Error("journal GetTotalSummary: failed to sum debit", "user_id", userID, "error", err)
+		log.Error("journal GetTotalSummary: failed to get summary", "user_id", userID, "error", err)
 		return nil, err
 	}
 
-	totalCredit, err := s.repo.SumCreditByUserID(ctx, userID)
-	if err != nil {
-		log.Error("journal GetTotalSummary: failed to sum credit", "user_id", userID, "error", err)
-		return nil, err
-	}
-
-	count, err := s.repo.CountByUserID(ctx, userID)
-	if err != nil {
-		log.Error("journal GetTotalSummary: failed to count entries", "user_id", userID, "error", err)
-		return nil, err
-	}
-
-	return &JournalSummary{
-		TotalDebit:       totalDebit,
-		TotalCredit:      totalCredit,
-		TransactionCount: count,
-	}, nil
+	return summary, nil
 }
 
 func (s *service) Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error) {
@@ -166,14 +150,20 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
-	// Validate all accounts are posting accounts
+	// Validate all accounts are posting accounts (batch query)
+	accountIDs := make([]int64, len(req.Lines))
+	for i, l := range req.Lines {
+		accountIDs[i] = l.AccountID
+	}
+	accounts, err := s.accountRepo.FindByIDs(ctx, accountIDs)
+	if err != nil {
+		log.Error("journal create: failed to find accounts", "user_id", userID, "account_ids", accountIDs, "error", err)
+		return nil, err
+	}
+
 	for _, l := range req.Lines {
-		acc, err := s.accountRepo.FindByID(ctx, l.AccountID)
-		if err != nil {
-			log.Error("journal create: failed to find account", "user_id", userID, "account_id", l.AccountID, "error", err)
-			return nil, err
-		}
-		if acc == nil {
+		acc, ok := accounts[l.AccountID]
+		if !ok || acc == nil {
 			log.Warn("journal create: account not found", "user_id", userID, "account_id", l.AccountID)
 			return nil, errors.New("account not found")
 		}
@@ -197,27 +187,37 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 		}
 	}
 
-	entry := &JournalEntry{
-		UserID:      userID,
-		Date:        date,
-		Description: req.Description,
-		Lines:       lines,
-	}
+	// Use transaction to ensure atomicity of entry + lines creation
+	var entryID int64
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		entry := &JournalEntry{
+			UserID:      userID,
+			Date:        date,
+			Description: req.Description,
+			Lines:       lines,
+		}
 
-	err = s.repo.CreateEntry(ctx, entry)
+		if err := s.repo.CreateEntry(ctx, entry); err != nil {
+			return err
+		}
+
+		entryID = entry.ID
+		return nil
+	})
+
 	if err != nil {
 		log.Error("journal create: failed to create entry", "user_id", userID, "error", err)
 		return nil, err
 	}
 
 	// Fetch the full entry with account info
-	created, err := s.repo.FindEntryByID(ctx, entry.ID)
+	created, err := s.repo.FindEntryByID(ctx, entryID)
 	if err != nil {
-		log.Error("journal create: failed to fetch created entry", "user_id", userID, "entry_id", entry.ID, "error", err)
+		log.Error("journal create: failed to fetch created entry", "user_id", userID, "entry_id", entryID, "error", err)
 		return nil, err
 	}
 
-	log.Info("journal created", "user_id", userID, "entry_id", entry.ID, "line_count", len(req.Lines))
+	log.Info("journal created", "user_id", userID, "entry_id", entryID, "line_count", len(req.Lines))
 	resp := toEntryResponse(created)
 	return &resp, nil
 }
@@ -263,14 +263,20 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
-	// Validate all accounts are posting accounts
+	// Validate all accounts are posting accounts (batch query)
+	accountIDs := make([]int64, len(req.Lines))
+	for i, l := range req.Lines {
+		accountIDs[i] = l.AccountID
+	}
+	accounts, err := s.accountRepo.FindByIDs(ctx, accountIDs)
+	if err != nil {
+		log.Error("journal update: failed to find accounts", "user_id", userID, "account_ids", accountIDs, "error", err)
+		return nil, err
+	}
+
 	for _, l := range req.Lines {
-		acc, err := s.accountRepo.FindByID(ctx, l.AccountID)
-		if err != nil {
-			log.Error("journal update: failed to find account", "user_id", userID, "account_id", l.AccountID, "error", err)
-			return nil, err
-		}
-		if acc == nil {
+		acc, ok := accounts[l.AccountID]
+		if !ok || acc == nil {
 			log.Warn("journal update: account not found", "user_id", userID, "account_id", l.AccountID)
 			return nil, errors.New("account not found")
 		}
@@ -294,11 +300,15 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		}
 	}
 
-	existing.Date = date
-	existing.Description = req.Description
-	existing.Lines = lines
+	// Use transaction to ensure atomicity of update operations
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		existing.Date = date
+		existing.Description = req.Description
+		existing.Lines = lines
 
-	err = s.repo.UpdateEntry(ctx, existing)
+		return s.repo.UpdateEntry(ctx, existing)
+	})
+
 	if err != nil {
 		log.Error("journal update: failed to update entry", "user_id", userID, "entry_id", entryID, "error", err)
 		return nil, err

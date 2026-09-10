@@ -34,7 +34,7 @@ export function JournalScrollView({
 }: JournalScrollViewProps) {
 	const observerRef = useRef<HTMLDivElement>(null);
 	const { getToken } = useAuth();
-	const LIMIT = 3;
+	const LIMIT = 10;
 	const [selectedJournal, setSelectedJournal] =
 		useState<JournalEntryListItem | null>(null);
 	const [editOpen, setEditOpen] = useState(false);
@@ -75,6 +75,10 @@ export function JournalScrollView({
 
 	const grouped = useMemo(() => groupByDate(journals), [journals]);
 
+	// Use ref for fetchNextPage to avoid re-creating observer on every render
+	const fetchNextPageRef = useRef(fetchNextPage);
+	fetchNextPageRef.current = fetchNextPage;
+
 	useEffect(() => {
 		const observer = new IntersectionObserver(
 			(entries) => {
@@ -84,7 +88,7 @@ export function JournalScrollView({
 					!isFetchingNextPage &&
 					!isError
 				) {
-					fetchNextPage();
+					fetchNextPageRef.current();
 				}
 			},
 			{
@@ -98,15 +102,16 @@ export function JournalScrollView({
 		}
 
 		return () => observer.disconnect();
-	}, [hasNextPage, isFetchingNextPage, fetchNextPage, isError]);
+	}, [hasNextPage, isFetchingNextPage, isError]);
 
-	// useEffect(() => {
-	// 	if (isError) {
-	// 		toast.error(
-	// 			`Failed to load journals. ${error instanceof Error ? error.message : "Unknown error"}`,
-	// 		);
-	// 	}
-	// }, [isError, error]);
+	// Handle error toast
+	useEffect(() => {
+		if (isError) {
+			toast.error(
+				`Failed to load journals. ${error instanceof Error ? error.message : "Unknown error"}`,
+			);
+		}
+	}, [isError, error]);
 
 	function handleJournalClick(journal: JournalEntryListItem) {
 		setSelectedJournal(journal);

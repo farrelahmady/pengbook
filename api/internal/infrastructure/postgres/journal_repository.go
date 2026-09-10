@@ -228,7 +228,7 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 	`, whereClause, argIdx)
 
 	log := logger.FromContext(ctx)
-	log.Info("repo: FindEntriesByUserIDWithNetEffect query", "query", entryQuery, "args", args)
+	log.Debug("repo: FindEntriesByUserIDWithNetEffect query", "query", entryQuery, "args", args)
 
 	args = append(args, filter.Limit)
 
@@ -366,6 +366,28 @@ func (r *journalRepository) CountByUserID(ctx context.Context, userID int64) (in
 	var count int64
 	err := r.db(ctx).QueryRow(ctx, journalCountByUserIDQuery, userID).Scan(&count)
 	return count, err
+}
+
+const getSummaryByUserIDQuery = `
+	SELECT 
+		COALESCE(SUM(l.debit), 0) AS total_debit,
+		COALESCE(SUM(l.credit), 0) AS total_credit,
+		(SELECT COUNT(*) FROM journal_entries WHERE user_id = $1) AS transaction_count
+	FROM journal_entry_lines l
+	JOIN journal_entries e ON e.id = l.journal_entry_id
+	WHERE e.user_id = $1
+`
+
+func (r *journalRepository) GetSummaryByUserID(ctx context.Context, userID int64) (*journal.JournalSummary, error) {
+	log := logger.FromContext(ctx)
+	var summary journal.JournalSummary
+	err := r.db(ctx).QueryRow(ctx, getSummaryByUserIDQuery, userID).
+		Scan(&summary.TotalDebit, &summary.TotalCredit, &summary.TransactionCount)
+	if err != nil {
+		log.Error("repo: failed to get journal summary", "user_id", userID, "error", err)
+		return nil, err
+	}
+	return &summary, nil
 }
 
 const sumDebitByUserIDQuery = `

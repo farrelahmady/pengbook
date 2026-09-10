@@ -69,6 +69,40 @@ func (r *accountRepository) FindByID(ctx context.Context, id int64) (*account.Ac
 	return &a, nil
 }
 
+const findByIDsQuery = `
+	SELECT id, user_id, code, name, type, level, parent_id, created_at, updated_at
+	FROM accounts
+	WHERE id = ANY($1)
+`
+
+func (r *accountRepository) FindByIDs(ctx context.Context, ids []int64) (map[int64]*account.Account, error) {
+	log := logger.FromContext(ctx)
+	if len(ids) == 0 {
+		return make(map[int64]*account.Account), nil
+	}
+
+	rows, err := r.db(ctx).Query(ctx, findByIDsQuery, ids)
+	if err != nil {
+		log.Error("repo: failed to find accounts by ids", "ids", ids, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	accounts := make(map[int64]*account.Account)
+	for rows.Next() {
+		var a account.Account
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Code, &a.Name, &a.Type, &a.Level, &a.ParentID, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			log.Error("repo: failed to scan account", "error", err)
+			return nil, err
+		}
+		accounts[a.ID] = &a
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
+
 const findByUserIDQuery = `
 	SELECT id, user_id, code, name, type, level, parent_id, created_at, updated_at
 	FROM accounts

@@ -14,6 +14,10 @@ type Repository interface {
 	// Returns (nil, nil) when not found.
 	FindByID(ctx context.Context, id int64) (*Account, error)
 
+	// FindByIDs returns accounts for the given ids in a single query.
+	// Returns a map of id -> Account for quick lookup.
+	FindByIDs(ctx context.Context, ids []int64) (map[int64]*Account, error)
+
 	// FindByUserID returns all accounts for the given user, ordered by code.
 	FindByUserID(ctx context.Context, userID int64) ([]Account, error)
 

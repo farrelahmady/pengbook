@@ -27,6 +27,9 @@ type Repository interface {
 	// DeleteEntry deletes a journal entry and its lines.
 	DeleteEntry(ctx context.Context, id int64) error
 
+	// GetSummaryByUserID returns aggregated summary (total debit, total credit, count) in a single query.
+	GetSummaryByUserID(ctx context.Context, userID int64) (*JournalSummary, error)
+
 	// CountByUserID returns the total count of journal entries for a user.
 	CountByUserID(ctx context.Context, userID int64) (int64, error)
 
