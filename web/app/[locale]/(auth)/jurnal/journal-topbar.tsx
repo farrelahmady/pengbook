@@ -11,6 +11,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("JournalTopbar");
 
 export default function JournalTopbar() {
 	const t = useTranslations("journalPage");
@@ -18,7 +21,10 @@ export default function JournalTopbar() {
 	const currencyFormat = useCurrencyFormatter();
 	const { data, isLoading } = useQuery({
 		queryKey: ["journalSummary"],
-		queryFn: () => journalService.getTotalSummary(),
+		queryFn: () => {
+			logger.debug("Fetching journal summary");
+			return journalService.getTotalSummary();
+		},
 	});
 
 	const labelPeriod = format.dateTime(new Date(), {
@@ -27,11 +33,14 @@ export default function JournalTopbar() {
 	});
 
 	async function handleDownload() {
+		logger.info("Download initiated");
 		const toastId = toast.loading(t("download.toastLoading"));
 		try {
 			// await journalService.downloadTransactions();
+			logger.info("Download completed successfully");
 			toast.success(t("download.toastSuccess"), { id: toastId });
-		} catch {
+		} catch (error) {
+			logger.error("Download failed", { error });
 			toast.error(t("download.toastError"), { id: toastId });
 		}
 	}

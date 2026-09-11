@@ -85,12 +85,130 @@ return res.data.data;
 3. **Fokus di UI/UX** — component structure, styling, user interaction
 4. **Jika butuh data baru** — minta buat endpoint API baru, bukan kalkulasi di frontend
 5. **Gunakan http-client untuk API calls** — gunakan `createHttpClient()` dari `@/lib/http-client`, jangan raw `fetch()`. Ini memberikan benefit: auth middleware, logging, retry, dan error handling yang konsisten
+6. **Gunakan logger untuk semua operasi** — gunakan `createLogger()` dari `@/lib/logger` untuk logging di setiap komponen, service, dan HTTP interceptor. Ini penting untuk debugging di development dan monitoring di production
+
+### Contoh Penggunaan Logger
+
+```typescript
+// ✅ Gunakan logger di setiap file
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("NamaModule");
+
+// Debug: operasi normal, data fetching
+logger.debug("Fetching journals", { limit: 10 });
+
+// Info: operasi berhasil
+logger.info("Journals fetched", { count: data.length });
+
+// Warn: situasi yang perlu perhatian
+logger.warn("Token expiring soon", { expiresIn: 300 });
+
+// Error: kegagalan operasi
+logger.error("Failed to fetch journals", { error });
+```
+
+### Kapan Harus Log (Frontend)
+
+| Level | Kapan Digunakan | Contoh |
+|-------|-----------------|--------|
+| `debug` | Operasi normal, debugging | Fetching data, form submission |
+| `info` | Operasi berhasil | Data fetched, user logged in |
+| `warn` | Situasi perlu perhatian | Token expiring, fallback used |
+| `error` | Kegagalan operasi | API call failed, validation error |
+
+### Komponen yang WAJIB Menggunakan Logger (Frontend)
+
+- **Services** (`services/*.ts`) — log semua API calls dan responses
+- **HTTP Interceptors** (`http/interceptors/*.ts`) — log auth flow, retries
+- **HTTP Middlewares** (`http/middlewares/*.ts`) — log requests
+- **Auth Context** (`lib/auth-context.tsx`) — log init, login, logout, refresh
+- **Page Components** — log query states, error handling
+- **Form Components** — log submissions, validation errors
 
 ### Ketika Bekerja di `api/` (Backend)
 
 1. **Semua logika bisnis ada di sini** — kalkulasi, validasi, transformasi
 2. **Response harus sudah siap ditampilkan** — frontend tidak perlu proses ulang
 3. **Gunakan layer yang tepat** — handler → service → repository
+4. **Gunakan logger untuk semua operasi** — gunakan `logger.FromContext(ctx)` dari `pengbook/api/pkg/logger` untuk logging di setiap handler, service, dan repository
+
+### Contoh Penggunaan Logger (Backend)
+
+```go
+// ✅ Gunakan logger dari context di setiap handler/service
+import "pengbook/api/pkg/logger"
+
+func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
+    log := logger.FromContext(r.Context())
+    
+    log.Info("getting journals", "user_id", userID)
+    
+    result, err := h.service.GetAll(r.Context(), userID)
+    if err != nil {
+        log.Error("failed to get journals", "error", err)
+        response.Error(w, http.StatusInternalServerError, "failed to get journals")
+        return
+    }
+    
+    log.Info("journals fetched", "count", len(result.Data))
+    response.Success(w, http.StatusOK, result)
+}
+```
+
+```go
+// ✅ Di service layer
+func (s *Service) Create(ctx context.Context, userID int64, req CreateRequest) (*Journal, error) {
+    log := logger.FromContext(ctx)
+    
+    log.Debug("creating journal entry", "user_id", userID)
+    
+    // ... business logic
+    
+    log.Info("journal entry created", "journal_id", journal.ID)
+    return journal, nil
+}
+```
+
+### Kapan Harus Log (Backend)
+
+| Level | Kapan Digunakan | Contoh |
+|-------|-----------------|--------|
+| `Debug` | Operasi detail, debugging | Query execution, internal state |
+| `Info` | Operasi berhasil | Request handled, data fetched |
+| `Warn` | Situasi perlu perhatian | Fallback used, retry attempt |
+| `Error` | Kegagalan operasi | DB error, validation failed |
+
+### Komponen yang WAJIB Menggunakan Logger (Backend)
+
+- **Handlers** (`internal/module/*/handler.go`) — log all HTTP requests and responses
+- **Services** (`internal/module/*/service.go`) — log business operations
+- **Repositories** (`internal/module/*/repository.go`) — log database queries (optional)
+- **Middleware** (`internal/middleware/*.go`) — log middleware operations
+- **Infrastructure** (`internal/infrastructure/*.go`) — log external service calls
+
+### Konfigurasi Log Level (Backend)
+
+Backend menggunakan **APP_ENV + LOG_LEVEL** untuk menentukan log level.
+
+| APP_ENV | LOG_LEVEL | Hasil |
+|---------|-----------|-------|
+| `development` | (kosong) | `debug` (otomatis) |
+| `production` | (kosong) | `info` (otomatis) |
+| `development` | `error` | `error` (manual override) |
+| `production` | `debug` | `debug` (manual override) |
+
+**Contoh `.env`:**
+```bash
+# Development — otomatis debug
+APP_ENV=development
+
+# Production — otomatis info
+APP_ENV=production
+
+# Override manual
+APP_ENV=development LOG_LEVEL=error
+```
 
 ### Ketika Diminta Membuat Fitur Baru
 
@@ -121,3 +239,14 @@ Selain rules di atas, ikuti **Global Engineering Principles** dari opencode:
 | Backend | Go | `/api` |
 | Database | (see migrations) | `/api/migrations` |
 | Styling | Tailwind CSS, shadcn/ui | `/web/components` |
+
+---
+
+## Documentation
+
+| Dokumen | Lokasi | Deskripsi |
+|---------|--------|-----------|
+| [Logging System](web/docs/LOGGING.md) | `web/docs/LOGGING.md` | Panduan lengkap logging frontend & backend |
+| [Logging Issue](web/docs/issues/LOGGING_IMPROVEMENT_2026-09-12.md) | `web/docs/issues/` | Issue logging improvement |
+| [HTTP Interceptor](web/docs/HTTP_INTERCEPTOR.md) | `web/docs/` | Arsitektur HTTP interceptor |
+| [Architecture Issues](web/docs/issues/ARCHITECTURE_ISSUES_2026-09-11.md) | `web/docs/issues/` | Daftar architectural issues |

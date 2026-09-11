@@ -1,4 +1,5 @@
 import { authHttpClient } from "@/lib/http-client";
+import { createLogger } from "@/lib/logger";
 import {
 	ApiResponse,
 	JournalEntryListResponse,
@@ -6,6 +7,7 @@ import {
 	CreateJournalDto,
 } from "@/types";
 
+const logger = createLogger("journal.service");
 const API_BASE = "/api/v1";
 
 export const journalService = {
@@ -30,9 +32,19 @@ export const journalService = {
 			params.set("accountIds", request.accountIds.join(","));
 		}
 
+		logger.debug("Fetching journals (scroll view)", {
+			limit: request.limit,
+			hasCursor: !!request.cursor,
+		});
+
 		const res = await client.get<ApiResponse<JournalEntryListResponse>>(
 			`${API_BASE}/journals?${params}`,
 		);
+
+		logger.debug("Journals fetched", {
+			count: res.data.data.data.length,
+			hasNextCursor: !!res.data.data.nextCursor,
+		});
 
 		return res.data.data;
 	},
@@ -43,6 +55,9 @@ export const journalService = {
 		transactionCount: number;
 	}> => {
 		const client = authHttpClient();
+
+		logger.debug("Fetching journal summary");
+
 		const res = await client.get<
 			ApiResponse<{
 				totalDebit: number;
@@ -50,6 +65,13 @@ export const journalService = {
 				transactionCount: number;
 			}>
 		>(`${API_BASE}/journals/summary`);
+
+		logger.info("Journal summary fetched", {
+			totalDebit: res.data.data.totalDebit,
+			totalCredit: res.data.data.totalCredit,
+			transactionCount: res.data.data.transactionCount,
+		});
+
 		return res.data.data;
 	},
 
@@ -57,10 +79,18 @@ export const journalService = {
 		dto: CreateJournalDto,
 	): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
+
+		logger.debug("Creating journal entry");
+
 		const res = await client.post<ApiResponse<JournalEntryListItem>>(
 			`${API_BASE}/journals`,
 			dto,
 		);
+
+		logger.info("Journal entry created", {
+			id: res.data.data.id,
+		});
+
 		return res.data.data;
 	},
 
@@ -69,10 +99,16 @@ export const journalService = {
 		dto: CreateJournalDto,
 	): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
+
+		logger.debug("Updating journal entry", { id });
+
 		const res = await client.put<ApiResponse<JournalEntryListItem>>(
 			`${API_BASE}/journals/${id}`,
 			dto,
 		);
+
+		logger.info("Journal entry updated", { id });
+
 		return res.data.data;
 	},
 };

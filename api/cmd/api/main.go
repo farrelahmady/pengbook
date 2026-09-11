@@ -33,13 +33,18 @@ import (
 )
 
 func main() {
-	log := logger.New()
-
+	// Load config first to get log level
 	cfg, err := config.LoadConfig()
 	if err != nil {
+		// Use default logger before config is loaded
+		log := logger.New("info")
 		log.Error("load config", "error", err)
 		os.Exit(1)
 	}
+
+	// Create logger with configured log level
+	// Priority: LOG_LEVEL > APP_ENV auto-detect
+	log := logger.New(cfg.GetLogLevel())
 
 	log.Info("Config loaded", "config", cfg)
 
