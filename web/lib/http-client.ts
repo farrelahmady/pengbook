@@ -1,6 +1,7 @@
 import { HttpClient } from "@/http/core/http-client";
 import { authMiddleware } from "@/http/middlewares/auth-middleware";
 import { loggerMiddleware } from "@/http/middlewares/logger-middleware";
+import { authInterceptor } from "@/http/interceptors/auth-interceptor";
 import { HttpRequestConfig } from "@/http/types/http";
 import { getTokenProvider } from "@/lib/token-provider";
 
@@ -30,7 +31,7 @@ export function createHttpClient(getToken?: () => Promise<string | null>) {
 		middlewares.push(authMiddleware(getToken));
 	}
 
-	return new HttpClient(baseUrl, middlewares);
+	return new HttpClient(baseUrl, { middlewares });
 }
 
 /**
@@ -46,22 +47,102 @@ export function httpClient() {
 	return _client;
 }
 
+// ── Global Refresh Failed Handler ──────────────────────────
+
 /**
- * Singleton HttpClient with auth support.
- * Uses the global token provider set by AuthProvider.
+ * Global handler for failed token refresh.
+ * Called when token refresh fails (e.g., refresh token expired).
+ * Typically used to redirect to login page.
  *
- * Usage in services:
- *   import { authHttpClient } from "@/lib/http-client";
+ * @example
+ * ```typescript
+ * // In AuthProvider (set once):
+ * setOnRefreshFailed(async () => {
+ *   router.push("/login");
+ * });
+ * ```
+ */
+let _onRefreshFailed: (() => Promise<void>) | null = null;
+
+/**
+ * Set the global handler for failed token refresh.
+ * Should be called once in AuthProvider.
  *
- *   const client = authHttpClient();
- *   const res = await client.get<User[]>("/users");
+ * @param handler - Async function to call when refresh fails
+ */
+export function setOnRefreshFailed(handler: () => Promise<void>) {
+	_onRefreshFailed = handler;
+}
+
+/**
+ * Get the global handler for failed token refresh.
+ * Returns the current handler at call time (lazy read).
+ *
+ * This getter is used by authInterceptor to avoid timing issues
+ * where the handler is captured before AuthProvider sets it.
+ *
+ * @returns The current handler, or null if not set
+ */
+export function getOnRefreshFailed(): (() => Promise<void>) | null {
+	return _onRefreshFailed;
+}
+
+// ── Auth HttpClient ───────────────────────────────────────
+
+/**
+ * Singleton HttpClient with auth support and automatic 401 handling.
+ *
+ * Features:
+ * - Automatically adds auth token to requests (via authMiddleware)
+ * - Automatically refreshes token on 401 responses (via authInterceptor)
+ * - Handles concurrent 401 responses (only one refresh at a time)
+ * - Retries failed requests after token refresh
+ *
+ * The onRefreshFailed handler is set globally via setOnRefreshFailed().
+ * Should be called once in AuthProvider.
+ *
+ * @returns Singleton HttpClient instance
+ *
+ * @example
+ * ```typescript
+ * // In services (just use it):
+ * const client = authHttpClient();
+ * const res = await client.get<User[]>("/api/users");
+ * ```
  */
 let _authClient: HttpClient | null = null;
 
 export function authHttpClient() {
 	if (!_authClient) {
 		const getToken = getTokenProvider();
-		_authClient = createHttpClient(getToken ?? undefined);
+		const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+
+		const middlewares: Array<
+			(config: HttpRequestConfig) => Promise<HttpRequestConfig>
+		> = [loggerMiddleware()];
+
+		// Add auth middleware if token provider exists
+		if (getToken) {
+			middlewares.push(authMiddleware(getToken));
+		}
+
+		// Create interceptors
+		const interceptors = [];
+
+		// Add auth interceptor for 401 handling
+		if (getToken) {
+			interceptors.push(
+				authInterceptor({
+					getOnRefreshFailed, // ← Pass getter, not value
+				}),
+			);
+		}
+
+		_authClient = new HttpClient(baseUrl, {
+			middlewares,
+			interceptors,
+		});
 	}
+
 	return _authClient;
 }

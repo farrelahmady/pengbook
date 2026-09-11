@@ -12,6 +12,7 @@ import {
 import { useRouter } from "@/i18n/navigation";
 import { authService } from "@/services/auth";
 import { setTokenProvider } from "@/lib/token-provider";
+import { setOnRefreshFailed } from "@/lib/http-client";
 import type { User, TokenResponse } from "@/types";
 
 // ── Cookie helpers ──────────────────────────────────────────
@@ -171,6 +172,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		setTokenProvider(getToken);
 	}, [getToken]);
+
+	// ── Global refresh failed handler ──────────────────────
+
+	// Register onRefreshFailed globally so interceptor can redirect on refresh failure
+	useEffect(() => {
+		setOnRefreshFailed(async () => {
+			clearTokens();
+			router.push("/login");
+		});
+	}, [router]);
 
 	// ── Initialization ─────────────────────────────────────
 

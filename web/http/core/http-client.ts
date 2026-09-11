@@ -2,26 +2,105 @@ import { fetchAdapter } from "../adapters/fetch-adapter";
 import { HttpRequestConfig, ResponseType } from "../types/http";
 
 /**
+ * Interceptor interface for extending HttpClient behavior.
+ *
+ * Interceptors allow you to run code before/after requests,
+ * and handle responses (including errors like 401).
+ *
+ * @example
+ * ```typescript
+ * const myInterceptor: Interceptor = {
+ *   onRequest: async (config) => {
+ *     // Add custom header
+ *     config.headers = { ...config.headers, "X-Custom": "value" };
+ *     return config;
+ *   },
+ *   onResponse: async (response, config) => {
+ *     // Handle 401
+ *     if (response.status === 401) {
+ *       // Refresh token and retry
+ *       return null; // Signal retry
+ *     }
+ *     return response;
+ *   },
+ * };
+ * ```
+ */
+export interface Interceptor {
+	/**
+	 * Called before the request is sent.
+	 * Can modify the request config.
+	 */
+	onRequest?: (config: HttpRequestConfig) => Promise<HttpRequestConfig>;
+
+	/**
+	 * Called after the response is received.
+	 * Can modify the response or return null to signal retry.
+	 *
+	 * @param response - The raw Response object
+	 * @param config - The request config
+	 * @returns The (modified) response, or null to retry the request
+	 */
+	onResponse?: (
+		response: Response,
+		config: HttpRequestConfig,
+	) => Promise<Response | null>;
+}
+
+/**
+ * Configuration for HttpClient constructor.
+ */
+export interface HttpClientConfig {
+	/** Request middlewares (existing pattern). */
+	middlewares?: Array<(config: HttpRequestConfig) => Promise<HttpRequestConfig>>;
+	/** Response interceptors (new pattern). */
+	interceptors?: Interceptor[];
+}
+
+/**
  * Generic HTTP client built on top of the Fetch API.
  *
  * Features:
- * - Middleware pipeline (auth, logging, retry, etc.)
+ * - Middleware pipeline (request transforms)
+ * - Response interceptors (handle responses, retry on 401, etc.)
  * - Automatic request retries with configurable backoff
  * - Multiple response types (json, blob, text, arrayBuffer)
  * - Streaming support via raw() for downloads
  * - createFetch() bridge for systems that expect a native fetch signature
  *
  * Usage:
+ *   // With middlewares and interceptors
+ *   const client = new HttpClient("https://api.example.com", {
+ *     middlewares: [authMiddleware(getToken)],
+ *     interceptors: [authInterceptor({ onRefreshFailed })],
+ *   });
+ *
+ *   // Legacy: with middleware array only
  *   const client = new HttpClient("https://api.example.com", [authMiddleware()]);
+ *
  *   const res = await client.get<User[]>("/users");
  */
 export class HttpClient {
+	private requestMiddlewares: Array<
+		(config: HttpRequestConfig) => Promise<HttpRequestConfig>
+	>;
+	private responseInterceptors: Interceptor[];
+
 	constructor(
 		private baseUrl: string,
-		private middlewares: Array<
-			(config: HttpRequestConfig) => Promise<HttpRequestConfig>
-		> = [],
-	) {}
+		configOrMiddlewares:
+			| HttpClientConfig
+			| Array<(config: HttpRequestConfig) => Promise<HttpRequestConfig>> = [],
+	) {
+		// Support both new config object and legacy middleware array
+		if (Array.isArray(configOrMiddlewares)) {
+			this.requestMiddlewares = configOrMiddlewares;
+			this.responseInterceptors = [];
+		} else {
+			this.requestMiddlewares = configOrMiddlewares.middlewares ?? [];
+			this.responseInterceptors = configOrMiddlewares.interceptors ?? [];
+		}
+	}
 
 	/**
 	 * Appends query parameters to a URL string.
@@ -44,13 +123,13 @@ export class HttpClient {
 	}
 
 	/**
-	 * Runs the request config through the middleware pipeline.
+	 * Runs the request config through the request middleware pipeline.
 	 * Each middleware receives the config and returns a modified version.
 	 */
-	private async applyMiddlewares(config: HttpRequestConfig) {
+	private async applyRequestMiddlewares(config: HttpRequestConfig) {
 		let finalConfig = config;
 
-		for (const mw of this.middlewares) {
+		for (const mw of this.requestMiddlewares) {
 			finalConfig = await mw(finalConfig);
 		}
 
@@ -58,11 +137,41 @@ export class HttpClient {
 	}
 
 	/**
+	 * Runs the response through the response interceptor pipeline.
+	 * Each interceptor can modify the response or return null to signal retry.
+	 *
+	 * @returns The final response, or null if any interceptor signaled retry
+	 */
+	private async applyResponseInterceptors(
+		response: Response,
+		config: HttpRequestConfig,
+	): Promise<Response | null> {
+		let finalResponse: Response | null = response;
+
+		for (const interceptor of this.responseInterceptors) {
+			if (!interceptor.onResponse || finalResponse === null) {
+				continue;
+			}
+
+			finalResponse = await interceptor.onResponse(finalResponse, config);
+
+			// If interceptor returns null, signal retry
+			if (finalResponse === null) {
+				return null;
+			}
+		}
+
+		return finalResponse;
+	}
+
+	/**
 	 * Core request method. Handles:
 	 * 1. URL construction (baseUrl + path + query params)
-	 * 2. Middleware pipeline execution
-	 * 3. Retry logic (respects retryOn status codes)
-	 * 4. Response body parsing based on responseType
+	 * 2. Request middleware pipeline execution
+	 * 3. Fetch request
+	 * 4. Response interceptor pipeline execution
+	 * 5. Retry logic (respects retryOn status codes)
+	 * 6. Response body parsing based on responseType
 	 */
 	async request<T>(config: Omit<HttpRequestConfig, "url"> & { url: string }) {
 		let finalConfig: HttpRequestConfig = {
@@ -70,7 +179,8 @@ export class HttpClient {
 			url: this.baseUrl + this.buildUrl(config.url, config.params),
 		};
 
-		finalConfig = await this.applyMiddlewares(finalConfig);
+		// Apply request middlewares
+		finalConfig = await this.applyRequestMiddlewares(finalConfig);
 
 		const { retry } = finalConfig;
 		const maxRetries = retry?.maxRetries ?? 0;
@@ -81,7 +191,23 @@ export class HttpClient {
 
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
 			try {
-				const response = await fetchAdapter(finalConfig);
+				// Make the fetch request
+				const rawResponse = await fetchAdapter(finalConfig);
+
+				// Apply response interceptors
+				// If interceptor returns null, it signals retry (e.g., after 401 refresh)
+				const interceptedResponse = await this.applyResponseInterceptors(
+					rawResponse,
+					finalConfig,
+				);
+
+				// Interceptor signaled retry
+				if (interceptedResponse === null) {
+					console.log("[HttpClient] Retrying after interceptor signal...");
+					continue;
+				}
+
+				const response = interceptedResponse;
 
 				// If status matches retryOn and we have retries left, wait and retry
 				if (retryOn.includes(response.status) && attempt < maxRetries) {
@@ -141,7 +267,7 @@ export class HttpClient {
 			url: this.baseUrl + this.buildUrl(config.url, config.params),
 		};
 
-		finalConfig = await this.applyMiddlewares(finalConfig);
+		finalConfig = await this.applyRequestMiddlewares(finalConfig);
 
 		return fetchAdapter(finalConfig);
 	}
@@ -162,7 +288,7 @@ export class HttpClient {
 				credentials: init?.credentials as HttpRequestConfig["credentials"],
 			};
 
-			const finalConfig = await this.applyMiddlewares(config);
+			const finalConfig = await this.applyRequestMiddlewares(config);
 
 			return fetchAdapter(finalConfig);
 		};
