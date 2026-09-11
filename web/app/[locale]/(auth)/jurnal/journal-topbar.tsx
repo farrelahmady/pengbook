@@ -11,16 +11,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/lib/auth-context";
 
 export default function JournalTopbar() {
-	const { getToken } = useAuth();
 	const t = useTranslations("journalPage");
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
 	const { data, isLoading } = useQuery({
 		queryKey: ["journalSummary"],
-		queryFn: () => journalService.getTotalSummary(getToken),
+		queryFn: () => journalService.getTotalSummary(),
 	});
 
 	const labelPeriod = format.dateTime(new Date(), {

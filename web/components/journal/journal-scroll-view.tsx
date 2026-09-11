@@ -8,7 +8,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { journalService } from "@/services/journal";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
-import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
 interface JournalScrollViewProps {
@@ -33,7 +32,6 @@ export function JournalScrollView({
 	accountIds,
 }: JournalScrollViewProps) {
 	const observerRef = useRef<HTMLDivElement>(null);
-	const { getToken } = useAuth();
 	const LIMIT = 10;
 	const [selectedJournal, setSelectedJournal] =
 		useState<JournalEntryListItem | null>(null);
@@ -50,16 +48,14 @@ export function JournalScrollView({
 	} = useInfiniteQuery({
 		queryKey: ["journals", "scroll-view", { startDate, endDate, accountIds }],
 		queryFn: ({ pageParam }) => {
-			return journalService.getAllScrollView(
-				{
-					limit: LIMIT,
-					cursor: pageParam,
-					startDate,
-					endDate,
-					accountIds,
-				},
-				getToken,
-			);
+			// journalService.getTotalSummary();
+			return journalService.getAllScrollView({
+				limit: LIMIT,
+				cursor: pageParam,
+				startDate,
+				endDate,
+				accountIds,
+			});
 		},
 		initialPageParam: undefined as string | undefined,
 		getNextPageParam: (lastPage) => {

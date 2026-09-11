@@ -2,6 +2,7 @@ import { HttpClient } from "@/http/core/http-client";
 import { authMiddleware } from "@/http/middlewares/auth-middleware";
 import { loggerMiddleware } from "@/http/middlewares/logger-middleware";
 import { HttpRequestConfig } from "@/http/types/http";
+import { getTokenProvider } from "@/lib/token-provider";
 
 /**
  * Creates an HttpClient instance with configurable middleware.
@@ -43,4 +44,24 @@ export function httpClient() {
 		_client = createHttpClient(async () => null);
 	}
 	return _client;
+}
+
+/**
+ * Singleton HttpClient with auth support.
+ * Uses the global token provider set by AuthProvider.
+ *
+ * Usage in services:
+ *   import { authHttpClient } from "@/lib/http-client";
+ *
+ *   const client = authHttpClient();
+ *   const res = await client.get<User[]>("/users");
+ */
+let _authClient: HttpClient | null = null;
+
+export function authHttpClient() {
+	if (!_authClient) {
+		const getToken = getTokenProvider();
+		_authClient = createHttpClient(getToken ?? undefined);
+	}
+	return _authClient;
 }

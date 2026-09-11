@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { authService } from "@/services/auth";
+import { setTokenProvider } from "@/lib/token-provider";
 import type { User, TokenResponse } from "@/types";
 
 // ── Cookie helpers ──────────────────────────────────────────
@@ -163,6 +164,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 		return token;
 	}, [tryRefresh]);
+
+	// ── Global token provider ──────────────────────────────
+
+	// Register getToken globally so services can access it without parameter passing
+	useEffect(() => {
+		setTokenProvider(getToken);
+	}, [getToken]);
 
 	// ── Initialization ─────────────────────────────────────
 

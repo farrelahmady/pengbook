@@ -1,4 +1,4 @@
-import { createHttpClient } from "@/lib/http-client";
+import { authHttpClient } from "@/lib/http-client";
 import {
 	ApiResponse,
 	JournalEntryListResponse,
@@ -7,10 +7,6 @@ import {
 } from "@/types";
 
 const API_BASE = "/api/v1";
-
-function journalClient(getToken?: () => Promise<string | null>) {
-	return createHttpClient(getToken);
-}
 
 export const journalService = {
 	getAllScrollView: async (
@@ -21,9 +17,8 @@ export const journalService = {
 			endDate?: Date;
 			accountIds?: string[];
 		},
-		getToken?: () => Promise<string | null>,
 	): Promise<JournalEntryListResponse> => {
-		const client = journalClient(getToken);
+		const client = authHttpClient();
 
 		const params = new URLSearchParams();
 		params.set("limit", String(request.limit));
@@ -42,14 +37,12 @@ export const journalService = {
 		return res.data.data;
 	},
 
-	getTotalSummary: async (
-		getToken?: () => Promise<string | null>,
-	): Promise<{
+	getTotalSummary: async (): Promise<{
 		totalDebit: number;
 		totalCredit: number;
 		transactionCount: number;
 	}> => {
-		const client = journalClient(getToken);
+		const client = authHttpClient();
 		const res = await client.get<
 			ApiResponse<{
 				totalDebit: number;
@@ -62,9 +55,8 @@ export const journalService = {
 
 	create: async (
 		dto: CreateJournalDto,
-		getToken?: () => Promise<string | null>,
 	): Promise<JournalEntryListItem> => {
-		const client = journalClient(getToken);
+		const client = authHttpClient();
 		const res = await client.post<ApiResponse<JournalEntryListItem>>(
 			`${API_BASE}/journals`,
 			dto,
@@ -75,9 +67,8 @@ export const journalService = {
 	update: async (
 		id: string,
 		dto: CreateJournalDto,
-		getToken?: () => Promise<string | null>,
 	): Promise<JournalEntryListItem> => {
-		const client = journalClient(getToken);
+		const client = authHttpClient();
 		const res = await client.put<ApiResponse<JournalEntryListItem>>(
 			`${API_BASE}/journals/${id}`,
 			dto,
