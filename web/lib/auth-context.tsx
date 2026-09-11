@@ -154,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			router.push("/login");
 			return false;
 		}
-	}, []);
+	}, [router]);
 
 	/**
 	 * Returns a valid access token.

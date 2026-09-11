@@ -18,7 +18,7 @@
 | 6 | Dummy data services di production code | 🟡 Medium | Small | Open |
 | 7 | Services tidak bisa di-test (tight coupling) | 🟢 Low | Large | Open |
 | 8 | Retry middleware unused (dead code) | 🟢 Low | Small | Open |
-| 9 | `tryRefresh()` stale closure risk | 🟢 Low | Small | Open |
+| 9 | `tryRefresh()` stale closure risk | 🟢 Low | Small | ✅ Fixed |
 
 ---
 
@@ -362,7 +362,7 @@ const testService = createJournalService(mockClient);
 
 ---
 
-### 9. `tryRefresh()` Stale Closure Risk
+### 9. `tryRefresh()` Stale Closure Risk ✅ Fixed
 
 **Lokasi**: `lib/auth-context.tsx` — `tryRefresh()`
 
@@ -393,6 +393,8 @@ const tryRefresh = useCallback(async (): Promise<boolean> => {
   // ...
 }, [router]); // ← add router to deps
 ```
+
+**Status**: Fixed 2026-09-12
 
 ---
 
