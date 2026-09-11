@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
 import { POSTING_ACCOUNTS } from "@/lib/constants";
+import { queryKeys } from "@/lib/query-keys";
 
 interface JournalLine {
   accountId: string;
@@ -71,8 +72,8 @@ export function AdvancedForm({ onSuccess }: AdvancedFormProps) {
       });
 
       toast.success(t("toastSuccess"), { id: toastId });
-      queryClient.invalidateQueries({ queryKey: ["journals"] });
-      queryClient.invalidateQueries({ queryKey: ["journalSummary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.journals.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.journals.summary });
       onSuccess();
     } catch (err) {
       toast.error(t("toastError"), { id: toastId });

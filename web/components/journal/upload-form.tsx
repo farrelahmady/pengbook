@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
+import { queryKeys } from "@/lib/query-keys";
 
 interface UploadFormProps {
   onSuccess: () => void;
@@ -102,8 +103,8 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
     try {
       const result = await journalService.createBulk(file);
       toast.success(`${t("toastSuccess")} (${result.count} jurnal)`, { id: toastId });
-      queryClient.invalidateQueries({ queryKey: ["journals"] });
-      queryClient.invalidateQueries({ queryKey: ["journalSummary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.journals.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.journals.summary });
       onSuccess();
     } catch (err) {
       toast.error(t("toastError"), { id: toastId });

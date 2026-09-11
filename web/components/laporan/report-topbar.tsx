@@ -9,13 +9,14 @@ import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { reportService } from "@/services/report";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function ReportTopbar() {
 	const t = useTranslations("reportPage");
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
 	const { data, isLoading } = useQuery({
-		queryKey: ["reportSummary"],
+		queryKey: queryKeys.reports.summary,
 		queryFn: () => reportService.getSummary(),
 	});
 

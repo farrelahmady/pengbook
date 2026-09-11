@@ -5,16 +5,17 @@ import {
 	TopbarSummaryCard,
 } from "@/components/layout/topbar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { coaService } from "@/services/coa";
+import { accountService } from "@/services/account";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { queryKeys } from "@/lib/query-keys";
 
-export default function CoaTopbar() {
+export default function AccountTopbar() {
 	const t = useTranslations("coaPage");
 	const format = useFormatter();
 	const { data, isLoading } = useQuery({
-		queryKey: ["coaSummary"],
-		queryFn: () => coaService.getSummary(),
+		queryKey: queryKeys.accounts.summary,
+		queryFn: () => accountService.getSummary(),
 	});
 
 	const labelPeriod = format.dateTime(new Date(), {

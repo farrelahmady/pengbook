@@ -1,5 +1,8 @@
 import { HttpRequestConfig } from "../types/http";
 import { getTokenProvider } from "@/lib/token-provider";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("AuthInterceptor");
 
 /**
  * Auth Interceptor Configuration
@@ -138,7 +141,7 @@ export function authInterceptor(options: AuthInterceptorOptions = {}) {
 
 			// If refresh is already in progress, wait for it
 			if (lock.isRefreshing && lock.refreshPromise) {
-				console.log("[AuthInterceptor] Waiting for existing refresh...");
+				logger.debug("Waiting for existing refresh...");
 
 				try {
 					const token = await waitForRefresh(lock);
@@ -160,7 +163,9 @@ export function authInterceptor(options: AuthInterceptorOptions = {}) {
 
 			// ── Start New Refresh ──────────────────────────
 
-			console.log("[AuthInterceptor] Starting new refresh...");
+			logger.warn("Starting token refresh...", {
+				url: config.url,
+			});
 
 			lock.isRefreshing = true;
 			lock.refreshPromise = getToken();
@@ -170,18 +175,21 @@ export function authInterceptor(options: AuthInterceptorOptions = {}) {
 
 				if (!token) {
 					// Refresh failed — notify all waiters
+					logger.error("Token refresh failed - no token returned");
 					notifyWaiters(lock, null);
 					await onRefreshFailed?.();
 					return response;
 				}
 
 				// Refresh successful — notify all waiters
+				logger.info("Token refresh successful");
 				notifyWaiters(lock, token);
 
 				// Retry with new token
 				return retryWithNewToken(config, token);
-			} catch {
+			} catch (error) {
 				// Refresh error — notify all waiters
+				logger.error("Token refresh error", { error });
 				notifyWaiters(lock, null);
 				await onRefreshFailed?.();
 				return response;

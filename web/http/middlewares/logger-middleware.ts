@@ -1,15 +1,21 @@
 import { HttpRequestConfig } from "../types/http";
+import { createLogger } from "@/lib/logger";
 
 /**
- * Logger middleware that logs every outgoing request to the console.
- * Format: [HTTP] GET https://api.example.com/users
+ * Logger middleware that logs every outgoing request.
  *
- * Useful for development debugging. Remove or replace with a
- * production logger in production builds.
+ * Uses the structured logger with level filtering:
+ * - Development: logs all requests (debug level)
+ * - Production: logs requests at info level
  */
 export function loggerMiddleware() {
+	const logger = createLogger("http");
+
 	return async (config: HttpRequestConfig) => {
-		console.log(`[HTTP] ${config.method} ${config.url}`);
+		logger.debug("Request started", {
+			method: config.method,
+			url: config.url,
+		});
 		return config;
 	};
 }

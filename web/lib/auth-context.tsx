@@ -13,7 +13,10 @@ import { useRouter } from "@/i18n/navigation";
 import { authService } from "@/services/auth";
 import { setTokenProvider } from "@/lib/token-provider";
 import { setOnRefreshFailed } from "@/lib/http-client";
+import { createLogger } from "@/lib/logger";
 import type { User, TokenResponse } from "@/types";
+
+const logger = createLogger("Auth");
 
 // ── Cookie helpers ──────────────────────────────────────────
 
@@ -116,10 +119,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	// ── Core helpers ───────────────────────────────────────
 
 	/** Fetch current user profile */
-	const fetchUser = useCallback(async (token: string): Promise<User | null> => {
+	const fetchUser = useCallback(async (): Promise<User | null> => {
 		try {
-			return await authService.me(async () => token);
-		} catch {
+			logger.debug("Fetching user profile");
+			const user = await authService.me(); // Token handled by authHttpClient
+			if (user) {
+				logger.info("User profile fetched", { userId: user.id });
+			}
+			return user;
+		} catch (error) {
+			logger.warn("Failed to fetch user profile", { error });
 			return null;
 		}
 	}, []);
@@ -128,20 +137,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	const tryRefresh = useCallback(async (): Promise<boolean> => {
 		const refreshToken = getRefreshToken();
 		if (!refreshToken) {
+			logger.debug("No refresh token available, redirecting to login");
 			router.push("/login");
 			return false;
 		}
 
 		try {
+			logger.debug("Attempting token refresh");
 			const tokens = await authService.refresh(refreshToken);
 			setTokens(tokens.accessToken, tokens.refreshToken);
+			logger.info("Token refresh successful");
 			return true;
-		} catch {
+		} catch (error) {
+			logger.error("Token refresh failed", { error });
 			clearTokens();
 			router.push("/login");
 			return false;
 		}
-	}, []);
+	}, [router]);
 
 	/**
 	 * Returns a valid access token.
@@ -191,16 +204,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		async function init() {
 			const accessToken = getAccessToken();
 			if (!accessToken) {
+				logger.debug("No access token found on mount");
 				setIsLoading(false);
 				return;
 			}
 
 			// Token expired on mount → try refresh immediately
 			if (isTokenExpiringSoon(accessToken)) {
+				logger.debug("Access token expiring soon, attempting refresh on mount");
 				const refreshed = await tryRefresh();
 				if (cancelled) return;
 
 				if (!refreshed) {
+					logger.debug("Refresh failed on mount, clearing tokens");
 					clearTokens();
 					setIsLoading(false);
 					return;
@@ -210,13 +226,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			// Fetch user with valid token
 			const token = getAccessToken();
 			if (token) {
-				const u = await fetchUser(token);
+				const u = await fetchUser();
 				if (!cancelled) setUser(u);
 			}
 
 			if (!cancelled) setIsLoading(false);
 		}
 
+		logger.debug("AuthProvider initializing");
 		init();
 		return () => {
 			cancelled = true;
@@ -234,11 +251,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			if (isTokenExpiringSoon(token)) {
 				const refreshed = await tryRefresh();
 				if (refreshed) {
-					const newToken = getAccessToken();
-					if (newToken) {
-						const u = await fetchUser(newToken);
-						setUser(u);
-					}
+					const u = await fetchUser();
+					setUser(u);
 				}
 			}
 		}, 60 * 1000);
@@ -250,47 +264,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	const login = useCallback(
 		async (identifier: string, password: string) => {
-			const tokens = await authService.login({ identifier, password });
-			setTokens(tokens.accessToken, tokens.refreshToken);
+			logger.info("Login attempt", { identifier });
+			try {
+				const tokens = await authService.login({ identifier, password });
+				setTokens(tokens.accessToken, tokens.refreshToken);
 
-			const u = await fetchUser(tokens.accessToken);
-			setUser(u);
+				const u = await fetchUser();
+				setUser(u);
 
-			router.push("/jurnal");
+				logger.info("Login successful", { userId: u?.id });
+				router.push("/jurnal");
+			} catch (error) {
+				logger.error("Login failed", { identifier, error });
+				throw error;
+			}
 		},
 		[fetchUser, router],
 	);
 
 	const register = useCallback(
 		async (name: string, username: string, email: string, password: string) => {
-			const tokens = await authService.register({
-				name,
-				username,
-				email,
-				password,
-			});
-			setTokens(tokens.accessToken, tokens.refreshToken);
+			logger.info("Register attempt", { username, email });
+			try {
+				const tokens = await authService.register({
+					name,
+					username,
+					email,
+					password,
+				});
+				setTokens(tokens.accessToken, tokens.refreshToken);
 
-			const u = await fetchUser(tokens.accessToken);
-			setUser(u);
+				const u = await fetchUser();
+				setUser(u);
 
-			router.push("/jurnal");
+				logger.info("Register successful", { userId: u?.id });
+				router.push("/jurnal");
+			} catch (error) {
+				logger.error("Register failed", { username, email, error });
+				throw error;
+			}
 		},
 		[fetchUser, router],
 	);
 
 	const logout = useCallback(async () => {
+		logger.info("Logout initiated");
 		const refreshToken = getRefreshToken();
 		if (refreshToken) {
 			try {
 				await authService.logout(refreshToken);
-			} catch {
-				// Ignore logout API errors — clear local state anyway
+				logger.debug("Logout API call successful");
+			} catch (error) {
+				logger.warn("Logout API call failed (clearing local state anyway)", { error });
 			}
 		}
 
 		clearTokens();
 		setUser(null);
+		logger.info("Logout complete");
 		router.push("/login");
 	}, [router]);
 

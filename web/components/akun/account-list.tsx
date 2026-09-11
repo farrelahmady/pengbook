@@ -1,18 +1,19 @@
 "use client";
 
-import { coaService } from "@/services/coa";
+import { accountService } from "@/services/account";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { CoaTypeGroupCard } from "./coa-type-group";
-import { CoaTypeGroupSkeleton } from "./coa-skeleton";
+import { AccountTypeGroupCard } from "./account-type-group";
+import { AccountTypeGroupSkeleton } from "./account-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { BookOpen } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
 
-export default function CoaList() {
+export default function AccountList() {
 	const t = useTranslations("coaPage");
 	const { data, isLoading } = useQuery({
-		queryKey: ["coaSummary"],
-		queryFn: () => coaService.getSummary(),
+		queryKey: queryKeys.accounts.summary,
+		queryFn: () => accountService.getSummary(),
 	});
 
 	return (
@@ -22,9 +23,9 @@ export default function CoaList() {
 			<div className="flex flex-col gap-2 px-3 pb-4">
 				{isLoading && (
 					<>
-						<CoaTypeGroupSkeleton />
-						<CoaTypeGroupSkeleton />
-						<CoaTypeGroupSkeleton />
+						<AccountTypeGroupSkeleton />
+						<AccountTypeGroupSkeleton />
+						<AccountTypeGroupSkeleton />
 					</>
 				)}
 
@@ -39,7 +40,7 @@ export default function CoaList() {
 				{!isLoading && data && (
 					<>
 						{data.groups.map((group) => (
-							<CoaTypeGroupCard key={group.type} group={group} />
+							<AccountTypeGroupCard key={group.type} group={group} />
 						))}
 					</>
 				)}

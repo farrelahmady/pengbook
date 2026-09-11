@@ -9,6 +9,10 @@ import { journalService } from "@/services/journal";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+import { queryKeys } from "@/lib/query-keys";
+
+const logger = createLogger("JournalScrollView");
 
 interface JournalScrollViewProps {
 	startDate?: Date;
@@ -46,9 +50,14 @@ export function JournalScrollView({
 		isError,
 		error,
 	} = useInfiniteQuery({
-		queryKey: ["journals", "scroll-view", { startDate, endDate, accountIds }],
+		queryKey: queryKeys.journals.scrollView({ startDate, endDate, accountIds }),
 		queryFn: ({ pageParam }) => {
-			// journalService.getTotalSummary();
+			logger.debug("Fetching journals page", {
+				cursor: pageParam,
+				startDate: startDate?.toISOString(),
+				endDate: endDate?.toISOString(),
+				accountIds,
+			});
 			return journalService.getAllScrollView({
 				limit: LIMIT,
 				cursor: pageParam,
@@ -59,7 +68,12 @@ export function JournalScrollView({
 		},
 		initialPageParam: undefined as string | undefined,
 		getNextPageParam: (lastPage) => {
-			return lastPage.nextCursor ?? undefined;
+			const nextCursor = lastPage.nextCursor ?? undefined;
+			logger.debug("Next page param", {
+				hasNextCursor: !!lastPage.nextCursor,
+				totalItems: lastPage.data.length,
+			});
+			return nextCursor;
 		},
 		retry: false,
 	});
@@ -103,9 +117,10 @@ export function JournalScrollView({
 	// Handle error toast
 	useEffect(() => {
 		if (isError) {
-			toast.error(
-				`Failed to load journals. ${error instanceof Error ? error.message : "Unknown error"}`,
-			);
+			const errorMessage =
+				error instanceof Error ? error.message : "Unknown error";
+			logger.error("Failed to load journals", { error: errorMessage });
+			toast.error(`Failed to load journals. ${errorMessage}`);
 		}
 	}, [isError, error]);
 

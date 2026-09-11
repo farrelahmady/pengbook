@@ -37,6 +37,26 @@ type Config struct {
 	Redis    RedisConfig    `env:"REDIS"`
 	JWT      JWTConfig      `env:"JWT"`
 	HTTPPort int            `env:"HTTP_PORT" envDefault:"8080"`
+	AppEnv   string         `env:"APP_ENV" envDefault:"development"`
+	LogLevel string         `env:"LOG_LEVEL"`
+}
+
+// GetLogLevel mengembalikan log level berdasarkan APP_ENV dan LOG_LEVEL.
+//
+// Priority:
+// 1. LOG_LEVEL jika diset (manual override)
+// 2. Auto-detect berdasarkan APP_ENV:
+//    - production → "info"
+//    - development/staging → "debug"
+func (c *Config) GetLogLevel() string {
+	if c.LogLevel != "" {
+		return c.LogLevel
+	}
+
+	if c.AppEnv == "production" {
+		return "info"
+	}
+	return "debug"
 }
 
 // LoadConfig loads the .env file (if present) and parses all env vars

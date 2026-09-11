@@ -9,33 +9,34 @@ import { ReportCard } from "./report-card";
 import { ReportCardSkeleton } from "./report-card-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ChartColumn, Square, Clock, FileText } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function ReportList() {
 	const t = useTranslations("reportPage");
 	const currencyFormat = useCurrencyFormatter();
 
 	const { data: summary, isLoading: isLoadingSummary } = useQuery({
-		queryKey: ["reportSummary"],
+		queryKey: queryKeys.reports.summary,
 		queryFn: () => reportService.getSummary(),
 	});
 
 	const { data: trialBalance, isLoading: isLoadingTB } = useQuery({
-		queryKey: ["trialBalance"],
+		queryKey: queryKeys.reports.trialBalance,
 		queryFn: () => reportService.getTrialBalance(),
 	});
 
 	const { data: incomeStatement, isLoading: isLoadingIS } = useQuery({
-		queryKey: ["incomeStatement"],
+		queryKey: queryKeys.reports.incomeStatement,
 		queryFn: () => reportService.getIncomeStatement(),
 	});
 
 	const { data: balanceSheet, isLoading: isLoadingBS } = useQuery({
-		queryKey: ["balanceSheet"],
+		queryKey: queryKeys.reports.balanceSheet,
 		queryFn: () => reportService.getBalanceSheet(),
 	});
 
 	const { data: cashFlow, isLoading: isLoadingCF } = useQuery({
-		queryKey: ["cashFlow"],
+		queryKey: queryKeys.reports.cashFlow,
 		queryFn: () => reportService.getCashFlow(),
 	});
 
