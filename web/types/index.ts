@@ -34,7 +34,7 @@ export interface RegisterRequest {
 	password: string;
 }
 
-// COA
+// Account (Chart of Accounts)
 export type AccountType =
 	| "ASSET"
 	| "LIABILITY"
@@ -43,22 +43,23 @@ export type AccountType =
 	| "EXPENSE"
 	| "OTHER";
 
-export interface ChartOfAccount {
+export interface Account {
 	id: number;
 	code: string;
 	name: string;
 	type: AccountType;
+	level: number;
 	isPosting: boolean;
 	parentId: number | null;
 	createdAt: string;
 	updatedAt: string;
 }
 
-export interface ChartOfAccountWithChildren extends ChartOfAccount {
-	children: ChartOfAccountWithChildren[];
+export interface AccountWithChildren extends Account {
+	children: AccountWithChildren[];
 }
 
-export interface CreateCoaDto {
+export interface CreateAccountDto {
 	code: string;
 	name: string;
 	parentId?: number;
@@ -71,7 +72,7 @@ export interface JournalEntryLine {
 	accountId: number;
 	debit: number;
 	credit: number;
-	account?: ChartOfAccount;
+	account?: Account;
 }
 
 export interface JournalEntry {
@@ -217,18 +218,18 @@ export interface ReportSummary {
 	isTrialBalanceBalanced: boolean;
 }
 
-// COA Page
-export interface CoaTypeGroup {
+// Account Page
+export interface AccountTypeGroup {
 	type: AccountType;
 	label: string;
 	icon: string;
-	accounts: ChartOfAccountWithChildren[];
+	accounts: AccountWithChildren[];
 	count: number;
 }
 
-export interface CoaSummary {
+export interface AccountSummary {
 	totalAccounts: number;
 	postingAccounts: number;
 	headerAccounts: number;
-	groups: CoaTypeGroup[];
+	groups: AccountTypeGroup[];
 }

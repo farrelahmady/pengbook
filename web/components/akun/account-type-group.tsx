@@ -1,6 +1,6 @@
 "use client";
 
-import { CoaTypeGroup, ChartOfAccountWithChildren } from "@/types";
+import { AccountTypeGroup, AccountWithChildren } from "@/types";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import {
@@ -28,11 +28,11 @@ const typeColorMap: Record<string, string> = {
 	EXPENSE: "bg-warning-50 text-warning-600",
 };
 
-interface CoaTypeGroupCardProps {
-	group: CoaTypeGroup;
+interface AccountTypeGroupCardProps {
+	group: AccountTypeGroup;
 }
 
-function countPostingAccounts(accounts: ChartOfAccountWithChildren[]): number {
+function countPostingAccounts(accounts: AccountWithChildren[]): number {
 	let count = 0;
 	for (const acc of accounts) {
 		if (acc.isPosting) count++;
@@ -41,7 +41,7 @@ function countPostingAccounts(accounts: ChartOfAccountWithChildren[]): number {
 	return count;
 }
 
-function CoaAccountTree({ accounts, depth = 0 }: { accounts: ChartOfAccountWithChildren[]; depth?: number }) {
+function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[]; depth?: number }) {
 	return (
 		<>
 			{accounts.map((acc) => (
@@ -84,7 +84,7 @@ function CoaAccountTree({ accounts, depth = 0 }: { accounts: ChartOfAccountWithC
 						</div>
 					</div>
 					{acc.children.length > 0 && (
-						<CoaAccountTree accounts={acc.children} depth={depth + 1} />
+						<AccountTree accounts={acc.children} depth={depth + 1} />
 					)}
 				</div>
 			))}
@@ -92,7 +92,7 @@ function CoaAccountTree({ accounts, depth = 0 }: { accounts: ChartOfAccountWithC
 	);
 }
 
-export function CoaTypeGroupCard({ group }: CoaTypeGroupCardProps) {
+export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 	const [expanded, setExpanded] = useState(false);
 	const Icon = iconMap[group.icon] ?? Wallet;
 	const postingCount = countPostingAccounts(group.accounts);
@@ -132,7 +132,7 @@ export function CoaTypeGroupCard({ group }: CoaTypeGroupCardProps) {
 			{/* Accounts tree */}
 			{expanded && (
 				<div className="border-t border-black/[0.06]">
-					<CoaAccountTree accounts={group.accounts} />
+					<AccountTree accounts={group.accounts} />
 				</div>
 			)}
 		</div>

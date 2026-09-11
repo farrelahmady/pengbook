@@ -1,11 +1,11 @@
-import CoaTopbar from "@/components/akun/coa-topbar";
-import CoaList from "@/components/akun/coa-list";
+import AccountTopbar from "@/components/akun/account-topbar";
+import AccountList from "@/components/akun/account-list";
 
 export default function AkunPage() {
 	return (
 		<>
-			<CoaTopbar />
-			<CoaList />
+			<AccountTopbar />
+			<AccountList />
 		</>
 	);
 }

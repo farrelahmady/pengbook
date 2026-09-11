@@ -27,11 +27,11 @@ export const queryKeys = {
 		summary: ["journals", "summary"] as const,
 	},
 
-	// ── COA (Chart of Accounts) ─────────────────────────────
+	// ── Accounts (Chart of Accounts) ───────────────────────
 
-	coa: {
-		all: ["coa"] as const,
-		summary: ["coa", "summary"] as const,
+	accounts: {
+		all: ["accounts"] as const,
+		summary: ["accounts", "summary"] as const,
 	},
 
 	// ── Assets ──────────────────────────────────────────────

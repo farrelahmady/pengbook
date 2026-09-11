@@ -1,11 +1,11 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-interface CoaTypeGroupSkeletonProps {
+interface AccountTypeGroupSkeletonProps {
 	className?: string;
 }
 
-export function CoaTypeGroupSkeleton({ className }: CoaTypeGroupSkeletonProps) {
+export function AccountTypeGroupSkeleton({ className }: AccountTypeGroupSkeletonProps) {
 	return (
 		<div className={cn("card-default shadow-card", className)}>
 			<div className="flex items-center gap-3 px-4 py-3.5">
