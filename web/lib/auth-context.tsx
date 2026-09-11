@@ -116,9 +116,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	// ── Core helpers ───────────────────────────────────────
 
 	/** Fetch current user profile */
-	const fetchUser = useCallback(async (token: string): Promise<User | null> => {
+	const fetchUser = useCallback(async (): Promise<User | null> => {
 		try {
-			return await authService.me(async () => token);
+			return await authService.me(); // Token handled by authHttpClient
 		} catch {
 			return null;
 		}
@@ -210,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			// Fetch user with valid token
 			const token = getAccessToken();
 			if (token) {
-				const u = await fetchUser(token);
+				const u = await fetchUser();
 				if (!cancelled) setUser(u);
 			}
 
@@ -234,11 +234,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			if (isTokenExpiringSoon(token)) {
 				const refreshed = await tryRefresh();
 				if (refreshed) {
-					const newToken = getAccessToken();
-					if (newToken) {
-						const u = await fetchUser(newToken);
-						setUser(u);
-					}
+					const u = await fetchUser();
+					setUser(u);
 				}
 			}
 		}, 60 * 1000);
@@ -253,7 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			const tokens = await authService.login({ identifier, password });
 			setTokens(tokens.accessToken, tokens.refreshToken);
 
-			const u = await fetchUser(tokens.accessToken);
+			const u = await fetchUser();
 			setUser(u);
 
 			router.push("/jurnal");
@@ -271,7 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			});
 			setTokens(tokens.accessToken, tokens.refreshToken);
 
-			const u = await fetchUser(tokens.accessToken);
+			const u = await fetchUser();
 			setUser(u);
 
 			router.push("/jurnal");

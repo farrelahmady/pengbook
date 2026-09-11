@@ -1,4 +1,4 @@
-import { createHttpClient } from "@/lib/http-client";
+import { httpClient, authHttpClient } from "@/lib/http-client";
 import {
 	ApiResponse,
 	User,
@@ -7,19 +7,20 @@ import {
 	RegisterRequest,
 } from "@/types";
 
-function authClient(getToken?: () => Promise<string | null>) {
-	return createHttpClient(getToken);
-}
-
+/**
+ * Auth Service
+ *
+ * Uses two different HTTP clients:
+ * - httpClient(): For unauthenticated endpoints (login, register, refresh, logout)
+ * - authHttpClient(): For authenticated endpoints (me)
+ */
 export const authService = {
 	/**
 	 * Register a new user.
+	 * No auth required — uses httpClient (singleton).
 	 */
-	register: async (
-		data: RegisterRequest,
-		getToken?: () => Promise<string | null>,
-	): Promise<TokenResponse> => {
-		const client = authClient(getToken || (async () => null));
+	register: async (data: RegisterRequest): Promise<TokenResponse> => {
+		const client = httpClient();
 		const res = await client.post<ApiResponse<TokenResponse>>(
 			"/api/v1/auth/register",
 			data,
@@ -29,9 +30,10 @@ export const authService = {
 
 	/**
 	 * Login with email and password.
+	 * No auth required — uses httpClient (singleton).
 	 */
 	login: async (data: LoginRequest): Promise<TokenResponse> => {
-		const client = authClient();
+		const client = httpClient();
 		const res = await client.post<ApiResponse<TokenResponse>>(
 			"/api/v1/auth/login",
 			data,
@@ -41,9 +43,10 @@ export const authService = {
 
 	/**
 	 * Refresh access token using a refresh token.
+	 * No auth required — uses httpClient (singleton).
 	 */
 	refresh: async (refreshToken: string): Promise<TokenResponse> => {
-		const client = authClient();
+		const client = httpClient();
 		const res = await client.post<ApiResponse<TokenResponse>>(
 			"/api/v1/auth/refresh",
 			{ refreshToken },
@@ -53,19 +56,23 @@ export const authService = {
 
 	/**
 	 * Logout (revoke refresh token).
+	 * No auth required — uses httpClient (singleton).
 	 */
 	logout: async (refreshToken: string): Promise<void> => {
-		const client = authClient();
-		await client.post<ApiResponse<{ message: string }>>("/api/v1/auth/logout", {
-			refreshToken,
-		});
+		const client = httpClient();
+		await client.post<ApiResponse<{ message: string }>>(
+			"/api/v1/auth/logout",
+			{ refreshToken },
+		);
 	},
 
 	/**
-	 * Get current user profile (requires access token).
+	 * Get current user profile.
+	 * Auth required — uses authHttpClient (singleton with auth).
+	 * Token is automatically added via global token provider.
 	 */
-	me: async (getToken: () => Promise<string | null>): Promise<User> => {
-		const client = authClient(getToken);
+	me: async (): Promise<User> => {
+		const client = authHttpClient();
 		const res = await client.get<ApiResponse<User>>("/api/v1/auth/me");
 		return res.data.data;
 	},
