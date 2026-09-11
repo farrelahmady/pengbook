@@ -7,11 +7,12 @@ import { CoaTypeGroupCard } from "./coa-type-group";
 import { CoaTypeGroupSkeleton } from "./coa-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { BookOpen } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function CoaList() {
 	const t = useTranslations("coaPage");
 	const { data, isLoading } = useQuery({
-		queryKey: ["coaSummary"],
+		queryKey: queryKeys.coa.summary,
 		queryFn: () => coaService.getSummary(),
 	});
 

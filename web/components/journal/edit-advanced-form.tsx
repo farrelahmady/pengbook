@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
 import { POSTING_ACCOUNTS } from "@/lib/constants";
 import { JournalEntry } from "@/types";
+import { queryKeys } from "@/lib/query-keys";
 
 interface JournalLine {
 	accountId: string;
@@ -76,8 +77,8 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 			});
 
 			toast.success(t("toastSuccess"), { id: toastId });
-			queryClient.invalidateQueries({ queryKey: ["journals"] });
-			queryClient.invalidateQueries({ queryKey: ["journalSummary"] });
+			queryClient.invalidateQueries({ queryKey: queryKeys.journals.all });
+			queryClient.invalidateQueries({ queryKey: queryKeys.journals.summary });
 			onSuccess();
 		} catch {
 			toast.error(t("toastError"), { id: toastId });

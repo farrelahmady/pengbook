@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
 import { POSTING_ACCOUNTS } from "@/lib/constants";
 import { parseDecimal } from "@/lib/utils";
+import { queryKeys } from "@/lib/query-keys";
 
 interface BasicFormProps {
   onSuccess: () => void;
@@ -50,8 +51,8 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
       });
 
       toast.success(t("toastSuccess"), { id: toastId });
-      queryClient.invalidateQueries({ queryKey: ["journals"] });
-      queryClient.invalidateQueries({ queryKey: ["journalSummary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.journals.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.journals.summary });
       onSuccess();
     } catch (err) {
       toast.error(t("toastError"), { id: toastId });

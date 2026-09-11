@@ -9,13 +9,14 @@ import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { assetService } from "@/services/asset";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function AssetTopbar() {
 	const t = useTranslations("assetPage");
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
 	const { data, isLoading } = useQuery({
-		queryKey: ["assetSummary"],
+		queryKey: queryKeys.assets.summary,
 		queryFn: () => assetService.getSummary(),
 	});
 

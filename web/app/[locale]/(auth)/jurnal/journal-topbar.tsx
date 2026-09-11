@@ -12,6 +12,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
 import { createLogger } from "@/lib/logger";
+import { queryKeys } from "@/lib/query-keys";
 
 const logger = createLogger("JournalTopbar");
 
@@ -20,7 +21,7 @@ export default function JournalTopbar() {
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
 	const { data, isLoading } = useQuery({
-		queryKey: ["journalSummary"],
+		queryKey: queryKeys.journals.summary,
 		queryFn: () => {
 			logger.debug("Fetching journal summary");
 			return journalService.getTotalSummary();

@@ -7,11 +7,12 @@ import { AssetGroupCard } from "./asset-group-card";
 import { AssetGroupCardSkeleton } from "./asset-group-card-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FolderOpen } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function AssetList() {
 	const t = useTranslations("assetPage");
 	const { data, isLoading } = useQuery({
-		queryKey: ["assetSummary"],
+		queryKey: queryKeys.assets.summary,
 		queryFn: () => assetService.getSummary(),
 	});
 

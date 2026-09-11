@@ -10,6 +10,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { createLogger } from "@/lib/logger";
+import { queryKeys } from "@/lib/query-keys";
 
 const logger = createLogger("JournalScrollView");
 
@@ -49,7 +50,7 @@ export function JournalScrollView({
 		isError,
 		error,
 	} = useInfiniteQuery({
-		queryKey: ["journals", "scroll-view", { startDate, endDate, accountIds }],
+		queryKey: queryKeys.journals.scrollView({ startDate, endDate, accountIds }),
 		queryFn: ({ pageParam }) => {
 			logger.debug("Fetching journals page", {
 				cursor: pageParam,

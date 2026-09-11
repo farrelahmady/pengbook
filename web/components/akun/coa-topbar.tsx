@@ -8,12 +8,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { coaService } from "@/services/coa";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function CoaTopbar() {
 	const t = useTranslations("coaPage");
 	const format = useFormatter();
 	const { data, isLoading } = useQuery({
-		queryKey: ["coaSummary"],
+		queryKey: queryKeys.coa.summary,
 		queryFn: () => coaService.getSummary(),
 	});
 
