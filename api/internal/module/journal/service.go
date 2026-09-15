@@ -313,6 +313,20 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		}
 	}
 
+	// Collect both old and new account IDs for balance recalculation.
+	// If user changes account A -> B, both A (old) and B (new) go stale.
+	recalcSet := make(map[int64]bool, len(existing.Lines)+len(accountIDs))
+	for _, l := range existing.Lines {
+		recalcSet[l.AccountID] = true
+	}
+	for _, id := range accountIDs {
+		recalcSet[id] = true
+	}
+	recalcIDs := make([]int64, 0, len(recalcSet))
+	for id := range recalcSet {
+		recalcIDs = append(recalcIDs, id)
+	}
+
 	// Use transaction to ensure atomicity of update operations
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		existing.Date = date
@@ -324,7 +338,7 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		}
 
 		// Recalculate account balances for affected accounts
-		if err := s.repo.RecalculateAccountBalance(ctx, accountIDs, userID); err != nil {
+		if err := s.repo.RecalculateAccountBalance(ctx, recalcIDs, userID); err != nil {
 			log.Warn("journal update: failed to recalculate account balance", "user_id", userID, "entry_id", entryID, "error", err)
 			// Don't fail the transaction, just log the warning
 		}

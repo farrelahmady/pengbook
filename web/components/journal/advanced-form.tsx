@@ -42,7 +42,7 @@ export function AdvancedForm({ onSuccess }: AdvancedFormProps) {
 
   const totalDr = lines.reduce((s, l) => s + parseDecimal(l.debit), 0);
   const totalCr = lines.reduce((s, l) => s + parseDecimal(l.credit), 0);
-  const isBalanced = Math.abs(totalDr - totalCr) < 0.01 && totalDr > 0;
+  const isBalanced = totalDr === totalCr && totalDr > 0;
 
   function updateLine(i: number, field: keyof JournalLine, value: string) {
     setLines((prev) =>
