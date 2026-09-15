@@ -94,6 +94,7 @@ type JournalEntryListItem struct {
 // JournalLineItem is a single line in journal entry list view.
 type JournalLineItem struct {
 	ID             int64   `json:"id"`
+	AccountID      int64   `json:"accountId"`
 	Debit          float64 `json:"debit"`
 	Credit         float64 `json:"credit"`
 	AccountDisplay string  `json:"accountDisplay"`

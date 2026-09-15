@@ -193,7 +193,11 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 		}
 	}
 
-	// Use transaction to ensure atomicity of entry + lines creation
+	// Delta update: only touch the accounts in this entry (O(lines)),
+	// instead of re-summing their entire history.
+	deltas := buildBalanceDeltas(lines, accounts)
+
+	// Use transaction to ensure atomicity of entry + lines + balance creation
 	var entryID int64
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		entry := &JournalEntry{
@@ -209,10 +213,11 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 
 		entryID = entry.ID
 
-		// Recalculate account balances for affected accounts
-		if err := s.repo.RecalculateAccountBalance(ctx, accountIDs, userID); err != nil {
-			log.Warn("journal create: failed to recalculate account balance", "user_id", userID, "error", err)
-			// Don't fail the transaction, just log the warning
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the entry back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, deltas); err != nil {
+			log.Error("journal create: failed to apply balance delta", "user_id", userID, "error", err)
+			return err
 		}
 
 		return nil
@@ -276,14 +281,27 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
-	// Validate all accounts are posting accounts (batch query)
+	// Validate all accounts are posting accounts (batch query).
+	// Lookup covers old + new accounts: new ones for validation, old ones for
+	// sign factors when reversing their deltas.
 	accountIDs := make([]int64, len(req.Lines))
 	for i, l := range req.Lines {
 		accountIDs[i] = l.AccountID
 	}
-	accounts, err := s.accountRepo.FindByIDs(ctx, accountIDs)
+	lookupSet := make(map[int64]bool, len(accountIDs)+len(existing.Lines))
+	for _, id := range accountIDs {
+		lookupSet[id] = true
+	}
+	for _, l := range existing.Lines {
+		lookupSet[l.AccountID] = true
+	}
+	lookupIDs := make([]int64, 0, len(lookupSet))
+	for id := range lookupSet {
+		lookupIDs = append(lookupIDs, id)
+	}
+	accounts, err := s.accountRepo.FindByIDs(ctx, lookupIDs)
 	if err != nil {
-		log.Error("journal update: failed to find accounts", "user_id", userID, "account_ids", accountIDs, "error", err)
+		log.Error("journal update: failed to find accounts", "user_id", userID, "account_ids", lookupIDs, "error", err)
 		return nil, err
 	}
 
@@ -313,6 +331,19 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		}
 	}
 
+	// Delta update: reverse the old lines, apply the new lines, merged per
+	// account. Covers account changes (A -> B reverses A, applies B) and
+	// amount-only changes with a single atomic UPSERT.
+	oldDeltas := buildBalanceDeltas(existing.Lines, accounts)
+	newDeltas := buildBalanceDeltas(lines, accounts)
+	merged := make(map[int64]float64, len(oldDeltas)+len(newDeltas))
+	for id, d := range oldDeltas {
+		merged[id] -= d
+	}
+	for id, d := range newDeltas {
+		merged[id] += d
+	}
+
 	// Use transaction to ensure atomicity of update operations
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		existing.Date = date
@@ -323,10 +354,11 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 			return err
 		}
 
-		// Recalculate account balances for affected accounts
-		if err := s.repo.RecalculateAccountBalance(ctx, accountIDs, userID); err != nil {
-			log.Warn("journal update: failed to recalculate account balance", "user_id", userID, "entry_id", entryID, "error", err)
-			// Don't fail the transaction, just log the warning
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the entry back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, merged); err != nil {
+			log.Error("journal update: failed to apply balance delta", "user_id", userID, "entry_id", entryID, "error", err)
+			return err
 		}
 
 		return nil
@@ -453,10 +485,58 @@ func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJo
 		})
 	}
 
-	// Convert map to slice for balance recalculation
-	accountIDs := make([]int64, 0, len(allAccountIDs))
+	// Resolve account types for every touched account. Codes are already in
+	// accountsByCode; IDs passed directly are fetched so ownership and posting
+	// level get the same validation as single create (previously unchecked).
+	accountsByID := make(map[int64]*account.Account, len(allAccountIDs))
+	for _, acc := range accountsByCode {
+		if acc != nil {
+			accountsByID[acc.ID] = acc
+		}
+	}
+	missing := make([]int64, 0)
 	for id := range allAccountIDs {
-		accountIDs = append(accountIDs, id)
+		if _, ok := accountsByID[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		fetched, err := s.accountRepo.FindByIDs(ctx, missing)
+		if err != nil {
+			log.Error("journal create bulk: failed to find accounts by ids", "user_id", userID, "error", err)
+			return 0, err
+		}
+		for id, acc := range fetched {
+			accountsByID[id] = acc
+		}
+	}
+	for id := range allAccountIDs {
+		acc := accountsByID[id]
+		if acc == nil {
+			log.Warn("journal create bulk: account not found by id", "user_id", userID, "account_id", id)
+			return 0, errors.New("account not found")
+		}
+		if acc.UserID != userID {
+			log.Warn("journal create bulk: account not owned by user", "user_id", userID, "account_id", id)
+			return 0, errors.New("account not found")
+		}
+		if !acc.CanPost() {
+			log.Warn("journal create bulk: not a posting account", "user_id", userID, "account_id", id, "level", acc.Level)
+			return 0, ErrNotPostingAccount
+		}
+	}
+
+	// Aggregate signed deltas across all entries: one atomic UPSERT instead of
+	// re-summing each account's entire history.
+	bulkDeltas := make(map[int64]float64, len(allAccountIDs))
+	for _, e := range entries {
+		for _, l := range e.Lines {
+			acc := accountsByID[l.AccountID]
+			if acc == nil {
+				continue
+			}
+			bulkDeltas[l.AccountID] += (l.Debit - l.Credit) * balanceSignFactor(acc.Type)
+		}
 	}
 
 	// Use transaction to ensure atomicity
@@ -465,10 +545,11 @@ func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJo
 			return err
 		}
 
-		// Recalculate account balances for all affected accounts
-		if err := s.repo.RecalculateAccountBalance(ctx, accountIDs, userID); err != nil {
-			log.Warn("journal create bulk: failed to recalculate account balance", "user_id", userID, "error", err)
-			// Don't fail the transaction, just log the warning
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the entries back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, bulkDeltas); err != nil {
+			log.Error("journal create bulk: failed to apply balance delta", "user_id", userID, "error", err)
+			return err
 		}
 
 		return nil
@@ -513,6 +594,34 @@ func (s *service) GenerateTemplate(ctx context.Context, userID int64) ([]byte, e
 
 	log.Info("journal template generated", "user_id", userID, "account_count", len(accounts))
 	return template, nil
+}
+
+// balanceSignFactor mirrors recalculate_account_balance in SQL: balance is stored
+// as (debit - credit) * sign, where revenue/liability/equity carry a negative
+// sign so a normal credit balance reads positive.
+func balanceSignFactor(t account.AccountType) float64 {
+	switch t {
+	case account.AccountTypeLiability, account.AccountTypeEquity, account.AccountTypeRevenue:
+		return -1
+	default: // ASSET, EXPENSE, OTHER
+		return 1
+	}
+}
+
+// buildBalanceDeltas aggregates signed deltas per account for the given lines.
+// Signed delta per line = (debit - credit) * signFactor(account type).
+// Lines whose account info is missing are skipped defensively (callers validate
+// beforehand, so this only guards against stale references).
+func buildBalanceDeltas(lines []JournalEntryLine, accounts map[int64]*account.Account) map[int64]float64 {
+	deltas := make(map[int64]float64, len(lines))
+	for _, l := range lines {
+		acc := accounts[l.AccountID]
+		if acc == nil {
+			continue
+		}
+		deltas[l.AccountID] += (l.Debit - l.Credit) * balanceSignFactor(acc.Type)
+	}
+	return deltas
 }
 
 func toEntryResponse(e *JournalEntry) JournalEntryResponse {

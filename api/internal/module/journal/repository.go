@@ -52,7 +52,17 @@ type Repository interface {
 	SumCreditByUserIDWithFilter(ctx context.Context, userID int64, filter EntryFilter) (float64, error)
 
 	// RecalculateAccountBalance recalculates account balances for the given accounts or all accounts for a user.
+	// Kept as the healing/reconciliation path. Hot path (Create/Update/CreateBulk)
+	// uses ApplyBalanceDelta instead (O(lines in entry), not O(all lines)).
 	RecalculateAccountBalance(ctx context.Context, accountIDs []int64, userID int64) error
+
+	// ApplyBalanceDelta applies pre-signed balance deltas atomically.
+	// deltas maps account_id -> signed amount, where signed amount is
+	// (debit - credit) * signFactor. signFactor is +1 for ASSET/EXPENSE/OTHER
+	// and -1 for LIABILITY/EQUITY/REVENUE (same as recalculate_account_balance).
+	// Implemented as a single UPSERT statement so concurrent writers cannot
+	// lose updates, and accounts without a balance row get one created.
+	ApplyBalanceDelta(ctx context.Context, deltas map[int64]float64) error
 }
 
 // EntryFilter contains filter options for listing journal entries.

@@ -100,6 +100,7 @@ export interface JournalEntryListItem {
 
 export interface JournalLineItem {
 	id: number;
+	accountId: number;
 	debit: number;
 	credit: number;
 	accountDisplay: string;

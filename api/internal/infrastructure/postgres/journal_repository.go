@@ -291,6 +291,7 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 		SELECT 
 			l.journal_entry_id,
 			l.id,
+			l.account_id,
 			l.debit,
 			l.credit,
 			a.code || ' · ' || a.name AS account_display
@@ -315,7 +316,7 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 	for lineRows.Next() {
 		var entryID int64
 		var line journal.JournalLineItem
-		if err := lineRows.Scan(&entryID, &line.ID, &line.Debit, &line.Credit, &line.AccountDisplay); err != nil {
+		if err := lineRows.Scan(&entryID, &line.ID, &line.AccountID, &line.Debit, &line.Credit, &line.AccountDisplay); err != nil {
 			return nil, err
 		}
 		if idx, ok := entryMap[entryID]; ok {
@@ -442,6 +443,55 @@ func (r *journalRepository) RecalculateAccountBalance(ctx context.Context, accou
 	if execErr != nil {
 		log.Error("repo: failed to recalculate account balance", "error", execErr)
 		return execErr
+	}
+
+	return nil
+}
+
+// ApplyBalanceDelta applies pre-signed balance deltas in a single atomic
+// UPSERT statement: balance = balance + delta per account. Zero deltas are
+// skipped. Missing balance rows are created (fixes new posting accounts that
+// never got a row from recalculate, which only UPDATEs existing rows).
+func (r *journalRepository) ApplyBalanceDelta(ctx context.Context, deltas map[int64]float64) error {
+	log := logger.FromContext(ctx)
+
+	type deltaRow struct {
+		id     int64
+		amount float64
+	}
+	rows := make([]deltaRow, 0, len(deltas))
+	for id, d := range deltas {
+		if d == 0 {
+			continue
+		}
+		rows = append(rows, deltaRow{id: id, amount: d})
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+
+	// Build one VALUES tuple per account so pgx encodes plain int64/float64
+	// args (no array-type mapping involved). The single statement keeps the
+	// read-modify-write atomic per row: no concurrent writer can lose updates.
+	valueStrings := make([]string, 0, len(rows))
+	args := make([]interface{}, 0, len(rows)*2)
+	for i, row := range rows {
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d)", i*2+1, i*2+2))
+		args = append(args, row.id, row.amount)
+	}
+
+	query := fmt.Sprintf(`
+		INSERT INTO account_balances (account_id, balance)
+		VALUES %s
+		ON CONFLICT (account_id) DO UPDATE SET
+			balance = account_balances.balance + EXCLUDED.balance,
+			updated_at = NOW()
+	`, strings.Join(valueStrings, ","))
+
+	_, err := r.db(ctx).Exec(ctx, query, args...)
+	if err != nil {
+		log.Error("repo: failed to apply balance delta", "error", err)
+		return err
 	}
 
 	return nil
