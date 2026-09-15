@@ -3,6 +3,7 @@ package journal_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"pengbook/api/internal/module/journal"
 )
@@ -12,7 +13,7 @@ func TestParseCSV_Success(t *testing.T) {
 2026-04-21,Pembelian perlengkapan,5.01.01.04,500000,0
 2026-04-21,Pembelian perlengkapan,1.01.02.01,0,500000`
 
-	entries, err := journal.ParseCSV(strings.NewReader(csv))
+	entries, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestParseCSV_MultipleEntries(t *testing.T) {
 2026-04-22,Entry 2,5.01.01.04,200000,0
 2026-04-22,Entry 2,1.01.02.01,0,200000`
 
-	entries, err := journal.ParseCSV(strings.NewReader(csv))
+	entries, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestParseCSV_WithCommasInAmount(t *testing.T) {
 2026-04-21,Test,5.01.01.04,"1,000,000",0
 2026-04-21,Test,1.01.02.01,0,"1,000,000"`
 
-	entries, err := journal.ParseCSV(strings.NewReader(csv))
+	entries, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestParseCSV_WithCommasInAmount(t *testing.T) {
 func TestParseCSV_EmptyFile(t *testing.T) {
 	csv := ``
 
-	_, err := journal.ParseCSV(strings.NewReader(csv))
+	_, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for empty file")
 	}
@@ -90,7 +91,7 @@ func TestParseCSV_EmptyFile(t *testing.T) {
 func TestParseCSV_HeaderOnly(t *testing.T) {
 	csv := `Tanggal,Deskripsi,Kode Akun,Debit,Kredit`
 
-	_, err := journal.ParseCSV(strings.NewReader(csv))
+	_, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for header-only file")
 	}
@@ -101,7 +102,7 @@ func TestParseCSV_MissingDate(t *testing.T) {
 ,Test,5.01.01.04,100000,0
 2026-04-21,Test,1.01.02.01,0,100000`
 
-	_, err := journal.ParseCSV(strings.NewReader(csv))
+	_, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for missing date")
 	}
@@ -112,7 +113,7 @@ func TestParseCSV_MissingAccountCode(t *testing.T) {
 2026-04-21,Test,,100000,0
 2026-04-21,Test,1.01.02.01,0,100000`
 
-	_, err := journal.ParseCSV(strings.NewReader(csv))
+	_, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for missing account code")
 	}
@@ -123,7 +124,7 @@ func TestParseCSV_InvalidDate(t *testing.T) {
 not-a-date,Test,5.01.01.04,100000,0
 2026-04-21,Test,1.01.02.01,0,100000`
 
-	_, err := journal.ParseCSV(strings.NewReader(csv))
+	_, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for invalid date")
 	}
@@ -134,7 +135,7 @@ func TestParseCSV_InvalidAmount(t *testing.T) {
 2026-04-21,Test,5.01.01.04,abc,0
 2026-04-21,Test,1.01.02.01,0,100000`
 
-	_, err := journal.ParseCSV(strings.NewReader(csv))
+	_, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for invalid amount")
 	}
@@ -144,7 +145,7 @@ func TestParseCSV_TooFewLines(t *testing.T) {
 	csv := `Tanggal,Deskripsi,Kode Akun,Debit,Kredit
 2026-04-21,Test,5.01.01.04,100000,0`
 
-	_, err := journal.ParseCSV(strings.NewReader(csv))
+	_, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for entry with only 1 line")
 	}
@@ -154,7 +155,7 @@ func TestParseCSV_WithBOM(t *testing.T) {
 	// BOM: 0xEF 0xBB 0xBF
 	csv := "\xEF\xBB\xBFTanggal,Deskripsi,Kode Akun,Debit,Kredit\n2026-04-21,Test,5.01.01.04,100000,0\n2026-04-21,Test,1.01.02.01,0,100000"
 
-	entries, err := journal.ParseCSV(strings.NewReader(csv))
+	entries, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,7 +171,7 @@ func TestParseCSV_SkipEmptyRows(t *testing.T) {
 2026-04-21,Test,1.01.02.01,0,100000
 2026-04-21,,5.01.01.04,0,0`
 
-	entries, err := journal.ParseCSV(strings.NewReader(csv))
+	entries, err := journal.ParseCSV(strings.NewReader(csv), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

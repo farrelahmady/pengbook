@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"pengbook/api/internal/database"
+	"pengbook/api/internal/middleware"
 	"pengbook/api/internal/module/account"
 	"pengbook/api/pkg/logger"
 )
@@ -19,6 +20,7 @@ var (
 	ErrInvalidLines   = errors.New("journal entry must have at least 2 lines")
 	ErrNotPostingAccount = errors.New("account is not a posting account (level != 3)")
 	ErrInvalidMonth   = errors.New("invalid month format, expected YYYY-MM")
+	ErrInvalidFilter  = errors.New("invalid date filter, expected RFC3339 (e.g. 2026-01-01T00:00:00+07:00)")
 )
 
 // Service is the PORT (interface) for journal business logic.
@@ -74,37 +76,45 @@ func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter Lis
 		AccountIDs: filter.AccountIDs,
 	}
 
-	// Parse cursor
+	// Parse cursor. A malformed cursor is a 400, not a silent reset to page
+	// one: ignoring it would make the client loop fetching page one forever.
 	if filter.Cursor != nil && *filter.Cursor != "" {
 		parts := strings.SplitN(*filter.Cursor, "_", 2)
-		if len(parts) == 2 {
-			t, err := time.Parse("2006-01-02T15:04:05.000Z", parts[0])
-			if err == nil {
-				entryFilter.CursorDatetime = &t
-			}else {
-				log.Warn("journal GetAllScrollView: failed to parse cursor datetime", "cursor", *filter.Cursor, "error", err)
-			}
-			id, err := strconv.ParseInt(parts[1], 10, 64)
-			if err == nil {
-				entryFilter.CursorID = &id
-			} else {
-				log.Warn("journal GetAllScrollView: failed to parse cursor ID", "cursor", *filter.Cursor, "error", err)
-			}
+		if len(parts) != 2 {
+			log.Warn("journal GetAllScrollView: malformed cursor", "cursor", *filter.Cursor)
+			return nil, ErrInvalidFilter
 		}
+		t, err := time.Parse("2006-01-02T15:04:05.000Z", parts[0])
+		if err != nil {
+			log.Warn("journal GetAllScrollView: failed to parse cursor datetime", "cursor", *filter.Cursor, "error", err)
+			return nil, ErrInvalidFilter
+		}
+		entryFilter.CursorDatetime = &t
+		id, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			log.Warn("journal GetAllScrollView: failed to parse cursor ID", "cursor", *filter.Cursor, "error", err)
+			return nil, ErrInvalidFilter
+		}
+		entryFilter.CursorID = &id
 	}
 
-	// Parse date filters
+	// Parse date filters. Invalid values are a 400: silently dropping them
+	// would leak unfiltered data the user did not ask for.
 	if filter.StartDate != "" {
 		t, err := time.Parse(time.RFC3339, filter.StartDate)
-		if err == nil {
-			entryFilter.StartDate = &t
+		if err != nil {
+			log.Warn("journal GetAllScrollView: invalid startDate", "startDate", filter.StartDate, "error", err)
+			return nil, ErrInvalidFilter
 		}
+		entryFilter.StartDate = &t
 	}
 	if filter.EndDate != "" {
 		t, err := time.Parse(time.RFC3339, filter.EndDate)
-		if err == nil {
-			entryFilter.EndDate = &t
+		if err != nil {
+			log.Warn("journal GetAllScrollView: invalid endDate", "endDate", filter.EndDate, "error", err)
+			return nil, ErrInvalidFilter
 		}
+		entryFilter.EndDate = &t
 	}
 
 	entries, err := s.repo.FindEntriesByUserIDWithNetEffect(ctx, userID, entryFilter)
@@ -725,19 +735,30 @@ func (s *service) ExportExcel(ctx context.Context, userID int64, filter ListRequ
 	log := logger.FromContext(ctx)
 
 	// Same filter semantics as the list view (cursor/limit don't apply).
+	// Invalid dates are a 400, like the list view.
 	entryFilter := EntryFilter{
 		AccountIDs: filter.AccountIDs,
 	}
 	if filter.StartDate != "" {
-		if t, err := time.Parse(time.RFC3339, filter.StartDate); err == nil {
-			entryFilter.StartDate = &t
+		t, err := time.Parse(time.RFC3339, filter.StartDate)
+		if err != nil {
+			log.Warn("journal ExportExcel: invalid startDate", "startDate", filter.StartDate, "error", err)
+			return nil, ErrInvalidFilter
 		}
+		entryFilter.StartDate = &t
 	}
 	if filter.EndDate != "" {
-		if t, err := time.Parse(time.RFC3339, filter.EndDate); err == nil {
-			entryFilter.EndDate = &t
+		t, err := time.Parse(time.RFC3339, filter.EndDate)
+		if err != nil {
+			log.Warn("journal ExportExcel: invalid endDate", "endDate", filter.EndDate, "error", err)
+			return nil, ErrInvalidFilter
 		}
+		entryFilter.EndDate = &t
 	}
+
+	// Calendar rendering follows the client's timezone (X-Timezone header,
+	// resolved by middleware); storage stays UTC.
+	loc := middleware.LocationFromContext(ctx)
 
 	rows, err := s.repo.FindExportRows(ctx, userID, entryFilter)
 	if err != nil {
@@ -760,7 +781,7 @@ func (s *service) ExportExcel(ctx context.Context, userID int64, filter ListRequ
 		}
 	}
 
-	export, err := GenerateExport(rows, accountInfos)
+	export, err := GenerateExport(rows, accountInfos, loc)
 	if err != nil {
 		log.Error("journal ExportExcel: failed to generate export", "user_id", userID, "error", err)
 		return nil, err

@@ -57,6 +57,7 @@ export default function JournalTopbar({
 		});
 		const toastId = toast.loading(t("download.toastLoading"));
 		try {
+			// Client timezone travels via the X-Timezone header (http middleware).
 			const blob = await journalService.downloadTransactions({
 				startDate,
 				endDate,

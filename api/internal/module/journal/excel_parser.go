@@ -10,6 +10,9 @@ import (
 )
 
 // ParseExcel parses an Excel (.xlsx) file and returns journal entry requests.
+// Calendar dates (without offset, incl. Excel serials) are interpreted at
+// midnight in loc (the client's timezone); instants with an explicit offset
+// are absolute.
 //
 // Expected format (Sheet 1 - "Template Jurnal"):
 //
@@ -17,7 +20,7 @@ import (
 //	|------------|--------------------|------------|---------|---------|
 //	| 2026-04-21 | Pembelian perlengkapan | 5.01.01.04 | 500000 | 0       |
 //	| 2026-04-21 | Pembelian perlengkapan | 1.01.02.01 | 0      | 500000  |
-func ParseExcel(reader io.Reader) ([]CreateJournalRequest, error) {
+func ParseExcel(reader io.Reader, loc *time.Location) ([]CreateJournalRequest, error) {
 	f, err := excelize.OpenReader(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open Excel file: %w", err)
@@ -87,7 +90,7 @@ func ParseExcel(reader io.Reader) ([]CreateJournalRequest, error) {
 		}
 
 		// Parse date
-		parsedDate, err := parseExcelDate(dateStr)
+		parsedDate, err := parseExcelDate(dateStr, loc)
 		if err != nil {
 			return nil, fmt.Errorf("row %d: invalid date %q: %w", lineNum, dateStr, err)
 		}
@@ -145,7 +148,12 @@ func ParseExcel(reader io.Reader) ([]CreateJournalRequest, error) {
 }
 
 // parseExcelDate parses dates from Excel, handling both string dates and Excel serial numbers.
-func parseExcelDate(s string) (time.Time, error) {
+// Layouts carrying an explicit offset parse absolutely (offset wins);
+// bare calendar dates and serials resolve to midnight in loc (nil-safe: UTC).
+func parseExcelDate(s string, loc *time.Location) (time.Time, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
 	// Try common date formats first
 	formats := []string{
 		"2006-01-02",              // YYYY-MM-DD
@@ -159,7 +167,7 @@ func parseExcelDate(s string) (time.Time, error) {
 	}
 
 	for _, format := range formats {
-		t, err := time.Parse(format, s)
+		t, err := time.ParseInLocation(format, s, loc)
 		if err == nil {
 			return t, nil
 		}
@@ -169,7 +177,7 @@ func parseExcelDate(s string) (time.Time, error) {
 	var serial float64
 	if _, err := fmt.Sscanf(s, "%f", &serial); err == nil && serial > 0 {
 		// Excel serial number: days since 1900-01-01 (with leap year bug)
-		baseDate := time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
+		baseDate := time.Date(1899, 12, 30, 0, 0, 0, 0, loc)
 		days := int(serial)
 		return baseDate.AddDate(0, 0, days), nil
 	}
