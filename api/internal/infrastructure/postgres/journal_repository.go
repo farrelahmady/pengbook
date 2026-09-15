@@ -392,6 +392,67 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 	return entries, nil
 }
 
+func (r *journalRepository) FindExportRows(ctx context.Context, userID int64, filter journal.EntryFilter) ([]journal.ExportRow, error) {
+	log := logger.FromContext(ctx)
+
+	// Same filters as the scroll-view list (user + date range + accounts),
+	// but no cursor/limit: export covers everything matching the filter.
+	where := []string{"e.user_id = $1"}
+	args := []interface{}{userID}
+	argIdx := 2
+
+	if filter.StartDate != nil {
+		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
+		args = append(args, *filter.StartDate)
+		argIdx++
+	}
+	if filter.EndDate != nil {
+		where = append(where, fmt.Sprintf("e.datetime <= $%d", argIdx))
+		args = append(args, *filter.EndDate)
+		argIdx++
+	}
+	if len(filter.AccountIDs) > 0 {
+		placeholders := make([]string, len(filter.AccountIDs))
+		for i, id := range filter.AccountIDs {
+			placeholders[i] = fmt.Sprintf("$%d", argIdx)
+			args = append(args, id)
+			argIdx++
+		}
+		// Entry-level match (same as the list view): a matching entry is
+		// exported whole, so the file stays balanced and re-uploadable.
+		where = append(where, fmt.Sprintf(
+			"e.id IN (SELECT journal_entry_id FROM journal_entry_lines WHERE account_id IN (%s))",
+			strings.Join(placeholders, ","),
+		))
+	}
+
+	query := fmt.Sprintf(`
+		SELECT e.datetime, e.description, a.code, l.debit, l.credit
+		FROM journal_entry_lines l
+		JOIN journal_entries e ON e.id = l.journal_entry_id
+		JOIN accounts a ON a.id = l.account_id
+		WHERE %s
+		ORDER BY e.datetime ASC, e.id ASC, l.id ASC
+	`, strings.Join(where, " AND "))
+
+	rows, err := r.db(ctx).Query(ctx, query, args...)
+	if err != nil {
+		log.Error("repo: failed to find export rows", "user_id", userID, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	exportRows := make([]journal.ExportRow, 0)
+	for rows.Next() {
+		var row journal.ExportRow
+		if err := rows.Scan(&row.Datetime, &row.Description, &row.AccountCode, &row.Debit, &row.Credit); err != nil {
+			return nil, err
+		}
+		exportRows = append(exportRows, row)
+	}
+	return exportRows, rows.Err()
+}
+
 const deleteEntryLinesQuery = `DELETE FROM journal_entry_lines WHERE journal_entry_id = $1`
 const deleteEntryQuery = `DELETE FROM journal_entries WHERE id = $1`
 

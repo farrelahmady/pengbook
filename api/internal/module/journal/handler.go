@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -29,6 +30,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/", h.GetAllScrollView)
 	r.Get("/summary", h.GetTotalSummary)
 	r.Get("/template", h.DownloadTemplate)
+	r.Get("/export", h.Export)
 	r.Post("/", h.Create)
 	r.Post("/upload", h.Upload)
 	r.Put("/{id}", h.Update)
@@ -36,15 +38,9 @@ func (h *Handler) Routes() http.Handler {
 	return r
 }
 
-// GetAllScrollView handles GET /api/v1/journals
-func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
-	if userID == 0 {
-		response.Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	// Parse query parameters
+// parseListRequest extracts cursor pagination + filter query parameters shared
+// by the scroll-view list and the export (export ignores cursor/limit).
+func parseListRequest(r *http.Request) ListRequest {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	cursor := r.URL.Query().Get("cursor")
 	startDate := r.URL.Query().Get("startDate")
@@ -60,13 +56,24 @@ func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	req := ListRequest{
+	return ListRequest{
 		Limit:      limit,
 		Cursor:     &cursor,
 		StartDate:  startDate,
 		EndDate:    endDate,
 		AccountIDs: accountIDs,
 	}
+}
+
+// GetAllScrollView handles GET /api/v1/journals
+func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	req := parseListRequest(r)
 
 	result, err := h.service.GetAllScrollView(r.Context(), userID, req)
 	if err != nil {
@@ -155,6 +162,37 @@ func (h *Handler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(template)))
 
 	w.Write(template)
+}
+
+// Export handles GET /api/v1/journals/export
+// Generates an Excel file of the user's journals (honoring the same filters
+// as the list view) that can be re-uploaded as-is.
+func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	req := parseListRequest(r)
+
+	export, err := h.service.ExportExcel(r.Context(), userID, req)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to generate export")
+		return
+	}
+
+	filenameDate := time.Now().Format("2006-01-02")
+	if loc, err := time.LoadLocation("Asia/Jakarta"); err == nil {
+		filenameDate = time.Now().In(loc).Format("2006-01-02")
+	}
+
+	// Set headers for Excel file download
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=jurnal-"+filenameDate+".xlsx")
+	w.Header().Set("Content-Length", strconv.Itoa(len(export)))
+
+	w.Write(export)
 }
 
 // Upload handles POST /api/v1/journals/upload

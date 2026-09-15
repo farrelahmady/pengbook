@@ -996,6 +996,82 @@ func TestHandler_Delete_InvalidID(t *testing.T) {
 	}
 }
 
+func TestHandler_Export_Success(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+	acc1, _ := tc.accRepo.FindByID(ctx, accID1)
+
+	created, err := tc.jnlSvc.Create(ctx, userID, journal.CreateJournalRequest{
+		Date:        time.Now().Format(time.RFC3339),
+		Description: "Export me",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	defer tc.jnlRepo.DeleteEntry(ctx, created.ID)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/export", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "spreadsheetml") {
+		t.Errorf("expected Excel content type, got %s", contentType)
+	}
+
+	if w.Body.Len() == 0 {
+		t.Fatal("expected non-empty response body")
+	}
+
+	// Exported file must be re-uploadable and contain our entry.
+	parsed, err := journal.ParseExcel(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("ParseExcel(exported): %v", err)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("expected 1 entry in export, got %d", len(parsed))
+	}
+	if parsed[0].Description != "Export me" {
+		t.Errorf("expected description kept, got %q", parsed[0].Description)
+	}
+	if parsed[0].Lines[0].AccountCode != acc1.Code {
+		t.Errorf("expected account code %s, got %s", acc1.Code, parsed[0].Lines[0].AccountCode)
+	}
+}
+
+func TestHandler_Export_Unauthorized(t *testing.T) {
+	tc := setup(t)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	// No auth middleware
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/export", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestHandler_Upload_EmptyExcel(t *testing.T) {
 	tc := setup(t)
 	userID := createUser(t, tc)

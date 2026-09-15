@@ -1,12 +1,10 @@
-import JournalList from "./journal-list";
 import CreateJournal from "./create-journal";
-import JournalTopbar from "./journal-topbar";
+import JurnalPageContent from "./jurnal-page-content";
 
 export default async function JurnalPage() {
 	return (
 		<>
-			<JournalTopbar />
-			<JournalList />
+			<JurnalPageContent />
 			<CreateJournal />
 		</>
 	);

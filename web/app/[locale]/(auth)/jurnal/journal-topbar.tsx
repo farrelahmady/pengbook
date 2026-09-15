@@ -16,7 +16,17 @@ import { queryKeys } from "@/lib/query-keys";
 
 const logger = createLogger("JournalTopbar");
 
-export default function JournalTopbar() {
+interface JournalTopbarProps {
+	startDate?: Date;
+	endDate?: Date;
+	accountIds?: string[];
+}
+
+export default function JournalTopbar({
+	startDate,
+	endDate,
+	accountIds,
+}: JournalTopbarProps) {
 	const t = useTranslations("journalPage");
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
@@ -34,10 +44,28 @@ export default function JournalTopbar() {
 	});
 
 	async function handleDownload() {
-		logger.info("Download initiated");
+		logger.info("Download initiated", {
+			hasStartDate: !!startDate,
+			hasEndDate: !!endDate,
+			accountCount: accountIds?.length ?? 0,
+		});
 		const toastId = toast.loading(t("download.toastLoading"));
 		try {
-			// await journalService.downloadTransactions();
+			const blob = await journalService.downloadTransactions({
+				startDate,
+				endDate,
+				accountIds,
+			});
+
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `jurnal-${new Date().toISOString().slice(0, 10)}.xlsx`;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+
 			logger.info("Download completed successfully");
 			toast.success(t("download.toastSuccess"), { id: toastId });
 		} catch (error) {

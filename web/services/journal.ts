@@ -160,6 +160,37 @@ export const journalService = {
 		return res.data.data;
 	},
 
+	downloadTransactions: async (request?: {
+		startDate?: Date;
+		endDate?: Date;
+		accountIds?: string[];
+	}): Promise<Blob> => {
+		const client = authHttpClient();
+
+		const params = new URLSearchParams();
+		if (request?.startDate)
+			params.set("startDate", request.startDate.toISOString());
+		if (request?.endDate) params.set("endDate", request.endDate.toISOString());
+		if (request?.accountIds && request.accountIds.length > 0) {
+			params.set("accountIds", request.accountIds.join(","));
+		}
+		const query = params.toString() ? `?${params}` : "";
+
+		logger.debug("Downloading journal export", {
+			hasStartDate: !!request?.startDate,
+			hasEndDate: !!request?.endDate,
+			accountCount: request?.accountIds?.length ?? 0,
+		});
+
+		const res = await client.get(`${API_BASE}/journals/export${query}`, {
+			responseType: "blob",
+		});
+
+		logger.info("Journal export downloaded");
+
+		return res.data as Blob;
+	},
+
 	downloadTemplate: async (): Promise<Blob> => {
 		const client = authHttpClient();
 

@@ -51,6 +51,10 @@ type Repository interface {
 	// SumCreditByUserIDWithFilter returns the total credit with filter.
 	SumCreditByUserIDWithFilter(ctx context.Context, userID int64, filter EntryFilter) (float64, error)
 
+	// FindExportRows returns every line of a user as flat export rows in
+	// chronological order (no pagination: export covers all filtered data).
+	FindExportRows(ctx context.Context, userID int64, filter EntryFilter) ([]ExportRow, error)
+
 	// RecalculateAccountBalance recalculates account balances for the given accounts or all accounts for a user.
 	// Kept as the healing/reconciliation path. Hot path (Create/Update/CreateBulk)
 	// uses ApplyBalanceDelta instead (O(lines in entry), not O(all lines)).
@@ -66,6 +70,16 @@ type Repository interface {
 	// Implemented as a single UPSERT statement so concurrent writers cannot
 	// lose updates, and accounts without a balance row get one created.
 	ApplyBalanceDelta(ctx context.Context, deltas map[int64]float64) error
+}
+
+// ExportRow is one flat row for journal export: a single journal line with
+// its entry header and account code.
+type ExportRow struct {
+	Datetime    time.Time
+	Description string
+	AccountCode string
+	Debit       float64
+	Credit      float64
 }
 
 // EntryFilter contains filter options for listing journal entries.

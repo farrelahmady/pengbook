@@ -42,6 +42,10 @@ type Service interface {
 
 	// GenerateTemplate generates an Excel template with user's posting accounts.
 	GenerateTemplate(ctx context.Context, userID int64) ([]byte, error)
+
+	// ExportExcel generates an Excel export of the user's journals (filterable
+	// like the list view) that can be re-uploaded as-is.
+	ExportExcel(ctx context.Context, userID int64, filter ListRequest) ([]byte, error)
 }
 
 type service struct {
@@ -691,6 +695,55 @@ func (s *service) GenerateTemplate(ctx context.Context, userID int64) ([]byte, e
 
 	log.Info("journal template generated", "user_id", userID, "account_count", len(accounts))
 	return template, nil
+}
+
+func (s *service) ExportExcel(ctx context.Context, userID int64, filter ListRequest) ([]byte, error) {
+	log := logger.FromContext(ctx)
+
+	// Same filter semantics as the list view (cursor/limit don't apply).
+	entryFilter := EntryFilter{
+		AccountIDs: filter.AccountIDs,
+	}
+	if filter.StartDate != "" {
+		if t, err := time.Parse(time.RFC3339, filter.StartDate); err == nil {
+			entryFilter.StartDate = &t
+		}
+	}
+	if filter.EndDate != "" {
+		if t, err := time.Parse(time.RFC3339, filter.EndDate); err == nil {
+			entryFilter.EndDate = &t
+		}
+	}
+
+	rows, err := s.repo.FindExportRows(ctx, userID, entryFilter)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to fetch export rows", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	accounts, err := s.accountRepo.FindPostingByUserID(ctx, userID)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to fetch posting accounts", "user_id", userID, "error", err)
+		return nil, err
+	}
+	accountInfos := make([]AccountInfo, len(accounts))
+	for i, acc := range accounts {
+		accountInfos[i] = AccountInfo{
+			Code:  acc.Code,
+			Name:  acc.Name,
+			Type:  string(acc.Type),
+			Level: acc.Level,
+		}
+	}
+
+	export, err := GenerateExport(rows, accountInfos)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to generate export", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	log.Info("journal export generated", "user_id", userID, "row_count", len(rows))
+	return export, nil
 }
 
 // balanceSignFactor mirrors recalculate_account_balance in SQL: balance is stored

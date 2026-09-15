@@ -1,7 +1,7 @@
 "use client";
 import { JournalScrollView } from "@/components/journal/journal-scroll-view";
 import { useTranslations } from "next-intl";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, X } from "lucide-react";
 import { accountService } from "@/services/account";
@@ -9,12 +9,34 @@ import { queryKeys } from "@/lib/query-keys";
 
 const QUICK_FILTERS = ["all", "today", "week", "month"] as const;
 
-export default function JournalList() {
+interface JournalListProps {
+	activeQuickFilter: string;
+	dateFrom: string;
+	dateTo: string;
+	selectedAccountIds: string[];
+	startDate?: Date;
+	endDate?: Date;
+	onQuickFilterChange: (f: string) => void;
+	onDateFromChange: (v: string) => void;
+	onDateToChange: (v: string) => void;
+	onToggleAccount: (accountId: string) => void;
+	onClearAllFilters: () => void;
+}
+
+export default function JournalList({
+	activeQuickFilter,
+	dateFrom,
+	dateTo,
+	selectedAccountIds,
+	startDate,
+	endDate,
+	onQuickFilterChange,
+	onDateFromChange,
+	onDateToChange,
+	onToggleAccount,
+	onClearAllFilters,
+}: JournalListProps) {
 	const t = useTranslations("journalPage");
-	const [activeQuickFilter, setActiveQuickFilter] = useState<string>("all");
-	const [dateFrom, setDateFrom] = useState("");
-	const [dateTo, setDateTo] = useState("");
-	const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 	const [showDatePicker, setShowDatePicker] = useState(false);
 	const [showCoaPicker, setShowCoaPicker] = useState(false);
 
@@ -28,61 +50,6 @@ export default function JournalList() {
 	const hasCustomDate = dateFrom || dateTo;
 	const hasCoaFilter = selectedAccountIds.length > 0;
 
-	const getDateRange = useCallback(() => {
-		if (hasCustomDate) {
-			return {
-				startDate: dateFrom ? new Date(dateFrom) : undefined,
-				endDate: dateTo ? new Date(dateTo + "T23:59:59.999") : undefined,
-			};
-		}
-
-		const today = new Date();
-		const endOfToday = new Date(
-			today.getFullYear(),
-			today.getMonth(),
-			today.getDate(),
-			23,
-			59,
-			59,
-			999,
-		);
-
-		switch (activeQuickFilter) {
-			case "all":
-				return { startDate: undefined, endDate: undefined };
-			case "today":
-				return { startDate: today, endDate: endOfToday };
-			case "week": {
-				const firstDay = new Date(today);
-				firstDay.setDate(today.getDate() - today.getDay());
-				return { startDate: firstDay, endDate: endOfToday };
-			}
-			case "month": {
-				const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-				return { startDate: firstDay, endDate: endOfToday };
-			}
-			default:
-				return { startDate: undefined, endDate: undefined };
-		}
-	}, [activeQuickFilter, hasCustomDate, dateFrom, dateTo]);
-
-	const { startDate, endDate } = getDateRange();
-
-	function toggleAccount(accountId: string) {
-		setSelectedAccountIds((prev) =>
-			prev.includes(accountId)
-				? prev.filter((id) => id !== accountId)
-				: [...prev, accountId],
-		);
-	}
-
-	function clearAllFilters() {
-		setDateFrom("");
-		setDateTo("");
-		setSelectedAccountIds([]);
-		setActiveQuickFilter("today");
-	}
-
 	const hasActiveFilters = hasCustomDate || hasCoaFilter;
 
 	return (
@@ -92,11 +59,7 @@ export default function JournalList() {
 				{QUICK_FILTERS.map((f) => (
 					<button
 						key={f}
-						onClick={() => {
-							setActiveQuickFilter(f);
-							setDateFrom("");
-							setDateTo("");
-						}}
+						onClick={() => onQuickFilterChange(f)}
 						className={[
 							"shrink-0 px-4 py-1.5 rounded-full text-[12px] font-semibold border transition-all no-tap",
 							activeQuickFilter === f && !hasCustomDate
@@ -149,7 +112,7 @@ export default function JournalList() {
 				{/* Clear filters */}
 				{hasActiveFilters && (
 					<button
-						onClick={clearAllFilters}
+						onClick={onClearAllFilters}
 						className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-semibold
                        border border-danger-200 text-danger-500 bg-danger-50 hover:bg-danger-100 transition-all no-tap"
 					>
@@ -174,10 +137,7 @@ export default function JournalList() {
 								<input
 									type="date"
 									value={dateFrom}
-									onChange={(e) => {
-										setDateFrom(e.target.value);
-										setActiveQuickFilter("");
-									}}
+									onChange={(e) => onDateFromChange(e.target.value)}
 									className="w-full bg-secondary-50 border border-secondary-200 rounded-lg px-3 py-2 text-[12px] text-secondary-700 outline-none focus:border-primary-400"
 								/>
 							</div>
@@ -188,10 +148,7 @@ export default function JournalList() {
 								<input
 									type="date"
 									value={dateTo}
-									onChange={(e) => {
-										setDateTo(e.target.value);
-										setActiveQuickFilter("");
-									}}
+									onChange={(e) => onDateToChange(e.target.value)}
 									className="w-full bg-secondary-50 border border-secondary-200 rounded-lg px-3 py-2 text-[12px] text-secondary-700 outline-none focus:border-primary-400"
 								/>
 							</div>
@@ -219,7 +176,7 @@ export default function JournalList() {
 									return (
 										<button
 											key={account.id}
-											onClick={() => toggleAccount(id)}
+											onClick={() => onToggleAccount(id)}
 											className={[
 												"flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
 												isSelected
