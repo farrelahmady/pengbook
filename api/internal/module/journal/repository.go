@@ -56,6 +56,9 @@ type Repository interface {
 	// uses ApplyBalanceDelta instead (O(lines in entry), not O(all lines)).
 	RecalculateAccountBalance(ctx context.Context, accountIDs []int64, userID int64) error
 
+	// InsertAuditLog records a journal action into the audit table.
+	InsertAuditLog(ctx context.Context, log *JournalAuditLog) error
+
 	// ApplyBalanceDelta applies pre-signed balance deltas atomically.
 	// deltas maps account_id -> signed amount, where signed amount is
 	// (debit - credit) * signFactor. signFactor is +1 for ASSET/EXPENSE/OTHER

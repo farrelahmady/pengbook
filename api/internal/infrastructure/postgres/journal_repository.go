@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -41,13 +42,21 @@ const createLineQuery = `
 	RETURNING id, created_at
 `
 
-func (r *journalRepository) CreateEntry(ctx context.Context, entry *journal.JournalEntry) error {
+func (r *journalRepository) createEntryHeader(ctx context.Context, entry *journal.JournalEntry) error {
 	log := logger.FromContext(ctx)
 	err := r.db(ctx).QueryRow(ctx, createEntryQuery,
 		entry.UserID, entry.Date, entry.Description,
 	).Scan(&entry.ID, &entry.CreatedAt, &entry.UpdatedAt)
 	if err != nil {
 		log.Error("repo: failed to create journal entry", "user_id", entry.UserID, "error", err)
+		return err
+	}
+	return nil
+}
+
+func (r *journalRepository) CreateEntry(ctx context.Context, entry *journal.JournalEntry) error {
+	log := logger.FromContext(ctx)
+	if err := r.createEntryHeader(ctx, entry); err != nil {
 		return err
 	}
 
@@ -75,13 +84,76 @@ func (r *journalRepository) createLines(ctx context.Context, entryID int64, line
 	return nil
 }
 
+// bulkLinesChunkSize caps rows per multi-row INSERT so the parameter count
+// stays safely below the Postgres limit (65535; 4 params per line).
+const bulkLinesChunkSize = 2000
+
+// createLinesBulk inserts lines of all entries in as few round trips as
+// possible. No RETURNING: line IDs are not used by the bulk flow (which only
+// returns a count), so they are left unset.
+func (r *journalRepository) createLinesBulk(ctx context.Context, entries []journal.JournalEntry) error {
+	type lineRow struct {
+		entryID   int64
+		accountID int64
+		debit     float64
+		credit    float64
+	}
+	rows := make([]lineRow, 0)
+	for i := range entries {
+		for j := range entries[i].Lines {
+			entries[i].Lines[j].JournalEntryID = entries[i].ID
+			rows = append(rows, lineRow{
+				entryID:   entries[i].ID,
+				accountID: entries[i].Lines[j].AccountID,
+				debit:     entries[i].Lines[j].Debit,
+				credit:    entries[i].Lines[j].Credit,
+			})
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+
+	for start := 0; start < len(rows); start += bulkLinesChunkSize {
+		end := start + bulkLinesChunkSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		chunk := rows[start:end]
+
+		valueStrings := make([]string, 0, len(chunk))
+		args := make([]interface{}, 0, len(chunk)*4)
+		for i, row := range chunk {
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d)", i*4+1, i*4+2, i*4+3, i*4+4))
+			args = append(args, row.entryID, row.accountID, row.debit, row.credit)
+		}
+
+		query := fmt.Sprintf(`
+			INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit)
+			VALUES %s
+		`, strings.Join(valueStrings, ","))
+
+		if _, err := r.db(ctx).Exec(ctx, query, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *journalRepository) CreateEntries(ctx context.Context, entries []journal.JournalEntry) error {
 	log := logger.FromContext(ctx)
+	// Headers first, one INSERT each: entry IDs are needed for the lines and
+	// the bulk audit row, and multi-row RETURNING does not guarantee order.
 	for i := range entries {
-		if err := r.CreateEntry(ctx, &entries[i]); err != nil {
+		if err := r.createEntryHeader(ctx, &entries[i]); err != nil {
 			log.Error("repo: failed to create journal entry in batch", "user_id", entries[i].UserID, "error", err)
 			return err
 		}
+	}
+	// All lines in bulk (no RETURNING: line IDs are unused downstream).
+	if err := r.createLinesBulk(ctx, entries); err != nil {
+		log.Error("repo: failed to create journal entry lines in batch", "error", err)
+		return err
 	}
 	return nil
 }
@@ -495,6 +567,30 @@ func (r *journalRepository) ApplyBalanceDelta(ctx context.Context, deltas map[in
 	}
 
 	return nil
+}
+
+const journalInsertAuditLogQuery = `
+	INSERT INTO journal_audit_logs (user_id, journal_entry_id, action, old_values, new_values)
+	VALUES ($1, $2, $3, $4, $5)
+	RETURNING id, created_at
+`
+
+func (r *journalRepository) InsertAuditLog(ctx context.Context, logEntry *journal.JournalAuditLog) error {
+	log := logger.FromContext(ctx)
+	var oldValues, newValues []byte
+	if logEntry.OldValues != nil {
+		oldValues, _ = json.Marshal(logEntry.OldValues)
+	}
+	if logEntry.NewValues != nil {
+		newValues, _ = json.Marshal(logEntry.NewValues)
+	}
+	err := r.db(ctx).QueryRow(ctx, journalInsertAuditLogQuery,
+		logEntry.UserID, logEntry.JournalEntryID, logEntry.Action, oldValues, newValues,
+	).Scan(&logEntry.ID, &logEntry.CreatedAt)
+	if err != nil {
+		log.Error("repo: failed to insert journal audit log", "user_id", logEntry.UserID, "entry_id", logEntry.JournalEntryID, "action", logEntry.Action, "error", err)
+	}
+	return err
 }
 
 const sumCreditByUserIDQuery = `

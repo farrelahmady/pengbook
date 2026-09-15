@@ -223,7 +223,14 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 			return err
 		}
 
-		return nil
+		// Audit log
+		newValues := JSONB{"date": date.Format(time.RFC3339), "description": req.Description, "lines": LinesSnapshot(lines)}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entry.ID,
+			Action:         string(JournalActionCreated),
+			NewValues:      &newValues,
+		})
 	})
 
 	if err != nil {
@@ -347,6 +354,9 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		merged[id] += d
 	}
 
+	// Snapshot before mutation for the audit log.
+	oldValues := JSONB{"date": existing.Date.Format(time.RFC3339), "description": existing.Description, "lines": LinesSnapshot(existing.Lines)}
+
 	// Use transaction to ensure atomicity of update operations
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		existing.Date = date
@@ -364,7 +374,15 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 			return err
 		}
 
-		return nil
+		// Audit log
+		newValues := JSONB{"date": date.Format(time.RFC3339), "description": req.Description, "lines": LinesSnapshot(lines)}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entryID,
+			Action:         string(JournalActionUpdated),
+			OldValues:      &oldValues,
+			NewValues:      &newValues,
+		})
 	})
 
 	if err != nil {
@@ -417,6 +435,17 @@ func (s *service) Delete(ctx context.Context, userID int64, entryID int64) error
 	}
 
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		// Audit log before delete (mirrors the account module pattern).
+		oldValues := JSONB{"date": existing.Date.Format(time.RFC3339), "description": existing.Description, "lines": LinesSnapshot(existing.Lines)}
+		if err := s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entryID,
+			Action:         string(JournalActionDeleted),
+			OldValues:      &oldValues,
+		}); err != nil {
+			return err
+		}
+
 		if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
 			return err
 		}
@@ -610,7 +639,17 @@ func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJo
 			return err
 		}
 
-		return nil
+		// Single audit row for the whole upload (one user action).
+		entryIDs := make([]int64, 0, len(entries))
+		for i := range entries {
+			entryIDs = append(entryIDs, entries[i].ID)
+		}
+		newValues := JSONB{"count": len(entries), "entry_ids": entryIDs}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:    userID,
+			Action:    string(JournalActionBulkCreated),
+			NewValues: &newValues,
+		})
 	})
 
 	if err != nil {

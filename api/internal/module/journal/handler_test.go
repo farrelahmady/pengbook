@@ -852,6 +852,41 @@ func TestHandler_Delete_Success(t *testing.T) {
 		t.Fatalf("expected balance 100000 for acc %d after create, got %v", accID2, got)
 	}
 
+	type auditRow struct {
+		action  string
+		entryID *int64
+	}
+	queryAudits := func() []auditRow {
+		t.Helper()
+		rows, err := tc.pool.Query(ctx,
+			"SELECT action, journal_entry_id FROM journal_audit_logs WHERE user_id = $1 ORDER BY id",
+			userID)
+		if err != nil {
+			t.Fatalf("query audit logs: %v", err)
+		}
+		defer rows.Close()
+
+		var audits []auditRow
+		for rows.Next() {
+			var a auditRow
+			if err := rows.Scan(&a.action, &a.entryID); err != nil {
+				t.Fatalf("scan audit log: %v", err)
+			}
+			audits = append(audits, a)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("audit rows: %v", err)
+		}
+		return audits
+	}
+
+	// Created audit must link to the entry while it still exists.
+	if audits := queryAudits(); len(audits) != 1 ||
+		audits[0].action != "journal.created" ||
+		audits[0].entryID == nil || *audits[0].entryID != entryID {
+		t.Fatalf("expected 1 journal.created audit for entry %d, got %+v", entryID, audits)
+	}
+
 	handler := journal.NewHandler(tc.jnlSvc)
 	r := chi.NewRouter()
 	r.Use(authMiddleware(userID))
@@ -890,6 +925,21 @@ func TestHandler_Delete_Success(t *testing.T) {
 	}
 	if got := getBalance(accID2); got != 0 {
 		t.Fatalf("expected balance 0 for acc %d after delete, got %v", accID2, got)
+	}
+
+	// Audit trail must contain created + deleted for this user, in order.
+	// NOTE: deleting the entry fires ON DELETE SET NULL, so BOTH rows end up
+	// with NULL entry ref (same convention as accounts_audit_logs) — the
+	// old_values JSONB snapshots keep the actual data.
+	audits := queryAudits()
+	if len(audits) != 2 {
+		t.Fatalf("expected 2 audit rows, got %d: %+v", len(audits), audits)
+	}
+	if audits[0].action != "journal.created" {
+		t.Fatalf("expected first audit journal.created, got %s", audits[0].action)
+	}
+	if audits[1].action != "journal.deleted" {
+		t.Fatalf("expected second audit journal.deleted, got %s", audits[1].action)
 	}
 }
 
