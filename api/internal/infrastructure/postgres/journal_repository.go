@@ -291,6 +291,7 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 		SELECT 
 			l.journal_entry_id,
 			l.id,
+			l.account_id,
 			l.debit,
 			l.credit,
 			a.code || ' · ' || a.name AS account_display
@@ -315,7 +316,7 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 	for lineRows.Next() {
 		var entryID int64
 		var line journal.JournalLineItem
-		if err := lineRows.Scan(&entryID, &line.ID, &line.Debit, &line.Credit, &line.AccountDisplay); err != nil {
+		if err := lineRows.Scan(&entryID, &line.ID, &line.AccountID, &line.Debit, &line.Credit, &line.AccountDisplay); err != nil {
 			return nil, err
 		}
 		if idx, ok := entryMap[entryID]; ok {

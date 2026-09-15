@@ -9,9 +9,6 @@ import { journalService } from "@/services/journal";
 import { accountService } from "@/services/account";
 import { dateInputToISO, parseDecimal, todayLocalDate } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
-import { createLogger } from "@/lib/logger";
-
-const logger = createLogger("BasicForm");
 
 interface BasicFormProps {
 	onSuccess: () => void;
@@ -48,9 +45,6 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
 		setIsSubmitting(true);
 
 		try {
-			const from = postingAccounts.find((a) => a.id === Number(fromAccount));
-			const to = postingAccounts.find((a) => a.id === Number(toAccount));
-
 			await journalService.create({
 				date: dateInputToISO(date),
 				description: description || undefined,

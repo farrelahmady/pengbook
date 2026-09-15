@@ -9,7 +9,7 @@ import { useTranslations } from "next-intl";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
 import { accountService } from "@/services/account";
-import { JournalEntry } from "@/types";
+import { JournalEntryListItem } from "@/types";
 import { queryKeys } from "@/lib/query-keys";
 import { createLogger } from "@/lib/logger";
 
@@ -22,7 +22,7 @@ interface JournalLine {
 }
 
 interface EditAdvancedFormProps {
-	journal: JournalEntry;
+	journal: JournalEntryListItem;
 	onSuccess: () => void;
 }
 
@@ -35,13 +35,13 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 		queryFn: () => accountService.getPostingAccounts(),
 	});
 
-	const [date, setDate] = useState(journal.date.slice(0, 10));
+	const [date, setDate] = useState(journal.datetime.slice(0, 10));
 	const [description, setDesc] = useState(journal.description ?? "");
 	const [lines, setLines] = useState<JournalLine[]>(
 		journal.lines.map((l) => ({
-			accountId: l.accountId,
-			debit: l.debit !== "0" ? l.debit : "",
-			credit: l.credit !== "0" ? l.credit : "",
+			accountId: l.accountId?.toString() ?? "",
+			debit: l.debit !== 0 ? String(l.debit) : "",
+			credit: l.credit !== 0 ? String(l.credit) : "",
 		})),
 	);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,7 +79,7 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 				date: dateInputToISO(date),
 				description: description || undefined,
 				lines: lines.map((l) => ({
-					accountId: l.accountId,
+					accountId: Number(l.accountId),
 					debit: parseDecimal(l.debit),
 					credit: parseDecimal(l.credit),
 				})),
