@@ -93,3 +93,24 @@ export function todayLocalDate(): string {
 export function dateInputToISO(date: string): string {
 	return new Date(`${date}T12:00:00`).toISOString();
 }
+
+/**
+ * Full ISO-8601 instant like toISOString(), but keeping the *local* offset
+ * (`+07:00`) instead of converting to UTC (`Z`).
+ *
+ * Use this when the server must interpret the date in the *client's* calendar
+ * (e.g. "which month does the user mean?"). toISOString() loses the offset,
+ * so a 1 Oct 00:30 +07:00 instant arrives as 30 Sep 17:30Z and a naive
+ * UTC-based month split would land in the wrong month.
+ */
+export function localISO(date: Date): string {
+	const pad = (n: number) => String(n).padStart(2, "0");
+	const offsetMin = -date.getTimezoneOffset();
+	const sign = offsetMin >= 0 ? "+" : "-";
+	const abs = Math.abs(offsetMin);
+	return (
+		`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+		`T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+		`${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+	);
+}

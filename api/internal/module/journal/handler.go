@@ -84,7 +84,9 @@ func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, http.StatusOK, result)
 }
 
-// GetTotalSummary handles GET /api/v1/journals/summary
+// GetTotalSummary handles GET /api/v1/journals/summary?month=RFC3339
+// The month instant carries the client timezone in its ISO offset; month
+// bounds are derived in that zone.
 func (h *Handler) GetTotalSummary(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == 0 {
@@ -92,8 +94,14 @@ func (h *Handler) GetTotalSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary, err := h.service.GetTotalSummary(r.Context(), userID)
+	month := r.URL.Query().Get("month")
+
+	summary, err := h.service.GetTotalSummary(r.Context(), userID, month)
 	if err != nil {
+		if errors.Is(err, ErrInvalidMonth) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to get summary")
 		return
 	}

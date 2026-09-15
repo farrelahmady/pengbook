@@ -239,44 +239,68 @@ func TestRepository_DeleteEntry(t *testing.T) {
 	}
 }
 
-func TestRepository_GetSummaryByUserID(t *testing.T) {
+func TestRepository_GetMonthlySummaryByUserID(t *testing.T) {
 	tc := setup(t)
 	ctx := context.Background()
 	userID := createUser(t, tc)
-	accID1 := createAccount(t, tc, userID, "1.01.01.01")
-	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+	accKas := createAccount(t, tc, userID, "1.01.01.01")
+	accPendapatan := createAccount(t, tc, userID, "4.01.01.01")
+	accBeban := createAccount(t, tc, userID, "5.01.01.01")
 
-	// Create entries
-	for i := 0; i < 3; i++ {
-		entry := &journal.JournalEntry{
+	// Two entries inside March 2026, one outside.
+	entries := []journal.JournalEntry{
+		{
 			UserID:      userID,
-			Date:        time.Now(),
-			Description: fmt.Sprintf("Entry %d", i),
+			Date:        time.Date(2026, 3, 10, 12, 0, 0, 0, time.FixedZone("WIB", 7*3600)),
+			Description: "Penjualan",
 			Lines: []journal.JournalEntryLine{
-				{AccountID: accID1, Debit: 100000, Credit: 0},
-				{AccountID: accID2, Debit: 0, Credit: 100000},
+				{AccountID: accKas, Debit: 500000, Credit: 0},
+				{AccountID: accPendapatan, Debit: 0, Credit: 500000},
 			},
-		}
-		if err := tc.jnlRepo.CreateEntry(ctx, entry); err != nil {
+		},
+		{
+			UserID:      userID,
+			Date:        time.Date(2026, 3, 15, 12, 0, 0, 0, time.FixedZone("WIB", 7*3600)),
+			Description: "Beban",
+			Lines: []journal.JournalEntryLine{
+				{AccountID: accBeban, Debit: 200000, Credit: 0},
+				{AccountID: accKas, Debit: 0, Credit: 200000},
+			},
+		},
+		{
+			UserID:      userID,
+			Date:        time.Date(2026, 4, 5, 12, 0, 0, 0, time.FixedZone("WIB", 7*3600)),
+			Description: "Penjualan April",
+			Lines: []journal.JournalEntryLine{
+				{AccountID: accKas, Debit: 999000, Credit: 0},
+				{AccountID: accPendapatan, Debit: 0, Credit: 999000},
+			},
+		},
+	}
+	for i := range entries {
+		if err := tc.jnlRepo.CreateEntry(ctx, &entries[i]); err != nil {
 			t.Fatalf("CreateEntry: %v", err)
 		}
-		defer tc.jnlRepo.DeleteEntry(ctx, entry.ID)
+		defer tc.jnlRepo.DeleteEntry(ctx, entries[i].ID)
 	}
 
-	// Get summary
-	summary, err := tc.jnlRepo.GetSummaryByUserID(ctx, userID)
+	loc := time.FixedZone("WIB", 7*3600)
+	start := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
+
+	summary, err := tc.jnlRepo.GetMonthlySummaryByUserID(ctx, userID, start, end)
 	if err != nil {
-		t.Fatalf("GetSummaryByUserID: %v", err)
+		t.Fatalf("GetMonthlySummaryByUserID: %v", err)
 	}
 
-	if summary.TransactionCount < 3 {
-		t.Errorf("expected at least 3 transactions, got %d", summary.TransactionCount)
+	if summary.Income != 500000 {
+		t.Errorf("expected income 500000, got %v", summary.Income)
 	}
-	if summary.TotalDebit < 300000 {
-		t.Errorf("expected total debit >= 300000, got %f", summary.TotalDebit)
+	if summary.Expense != 200000 {
+		t.Errorf("expected expense 200000, got %v", summary.Expense)
 	}
-	if summary.TotalCredit < 300000 {
-		t.Errorf("expected total credit >= 300000, got %f", summary.TotalCredit)
+	if summary.TransactionCount != 2 {
+		t.Errorf("expected transactionCount 2, got %d", summary.TransactionCount)
 	}
 }
 
@@ -604,8 +628,8 @@ func TestService_GetTotalSummary(t *testing.T) {
 		t.Fatalf("CreateEntry: %v", err)
 	}
 
-	// Get summary
-	summary, err := tc.jnlSvc.GetTotalSummary(ctx, userID)
+	// Get summary (entry uses time.Now, so it falls in the current month)
+	summary, err := tc.jnlSvc.GetTotalSummary(ctx, userID, "")
 	if err != nil {
 		t.Fatalf("GetTotalSummary: %v", err)
 	}

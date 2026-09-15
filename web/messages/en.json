@@ -15,8 +15,17 @@
 		"summaryCredit": {
 			"label": "Total Credit"
 		},
+		"summaryIncome": {
+			"label": "Income",
+			"sub": "This month"
+		},
+		"summaryExpense": {
+			"label": "Expense",
+			"sub": "This month"
+		},
 		"summarytransaction": {
-			"label": "Transactions"
+			"label": "Transactions",
+			"sub": "This month"
 		},
 		"transactionFilterChips": {
 			"all": "All",

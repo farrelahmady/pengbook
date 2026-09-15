@@ -7,6 +7,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { journalService } from "@/services/journal";
+import { localISO } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { Download } from "lucide-react";
@@ -30,15 +31,20 @@ export default function JournalTopbar({
 	const t = useTranslations("journalPage");
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
+	const now = new Date();
+	const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+	// Full ISO instant with the client's offset (NOT toISOString): the backend
+	// derives month bounds in this zone. monthKey stays coarse for caching.
+	const monthISO = localISO(now);
 	const { data, isLoading } = useQuery({
-		queryKey: queryKeys.journals.summary,
+		queryKey: queryKeys.journals.summaryForMonth(monthKey),
 		queryFn: () => {
-			logger.debug("Fetching journal summary");
-			return journalService.getTotalSummary();
+			logger.debug("Fetching journal summary", { month: monthISO });
+			return journalService.getTotalSummary(monthISO);
 		},
 	});
 
-	const labelPeriod = format.dateTime(new Date(), {
+	const labelPeriod = format.dateTime(now, {
 		month: "short",
 		year: "numeric",
 	});
@@ -95,12 +101,13 @@ export default function JournalTopbar({
 			>
 				<div className="flex gap-2 mt-4">
 					<TopbarSummaryCard
-						label={t("summaryDebit.label")}
+						label={t("summaryIncome.label")}
+						sub={t("summaryIncome.sub")}
 						value={
 							isLoading ? (
 								<Skeleton className="w-16 h-3 rounded" />
 							) : (
-								currencyFormat(data?.totalDebit ?? 0, {
+								currencyFormat(data?.income ?? 0, {
 									compact: true,
 									currency: "Rp",
 								})
@@ -108,12 +115,13 @@ export default function JournalTopbar({
 						}
 					/>
 					<TopbarSummaryCard
-						label={t("summaryCredit.label")}
+						label={t("summaryExpense.label")}
+						sub={t("summaryExpense.sub")}
 						value={
 							isLoading ? (
 								<Skeleton className="w-16 h-3 rounded" />
 							) : (
-								currencyFormat(data?.totalCredit ?? 0, {
+								currencyFormat(data?.expense ?? 0, {
 									compact: true,
 									currency: "Rp",
 								})
@@ -122,6 +130,7 @@ export default function JournalTopbar({
 					/>
 					<TopbarSummaryCard
 						label={t("summarytransaction.label")}
+						sub={t("summarytransaction.sub")}
 						value={
 							isLoading ? (
 								<Skeleton className="w-16 h-3 rounded" />

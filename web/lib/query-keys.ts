@@ -25,6 +25,8 @@ export const queryKeys = {
 			accountIds?: string[];
 		}) => ["journals", "scroll-view", filters] as const,
 		summary: ["journals", "summary"] as const,
+		summaryForMonth: (month: string) =>
+			["journals", "summary", month] as const,
 	},
 
 	// ── Accounts (Chart of Accounts) ───────────────────────

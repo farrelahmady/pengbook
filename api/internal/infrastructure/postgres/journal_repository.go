@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -513,23 +514,24 @@ func (r *journalRepository) CountByUserID(ctx context.Context, userID int64) (in
 	return count, err
 }
 
-const getSummaryByUserIDQuery = `
-	SELECT 
-		COALESCE(SUM(l.debit), 0) AS total_debit,
-		COALESCE(SUM(l.credit), 0) AS total_credit,
-		(SELECT COUNT(*) FROM journal_entries WHERE user_id = $1) AS transaction_count
+const getMonthlySummaryByUserIDQuery = `
+	SELECT
+		COALESCE(SUM(CASE WHEN a.type = 'REVENUE' THEN l.credit - l.debit ELSE 0 END), 0) AS income,
+		COALESCE(SUM(CASE WHEN a.type = 'EXPENSE' THEN l.debit - l.credit ELSE 0 END), 0) AS expense,
+		COUNT(DISTINCT e.id) AS transaction_count
 	FROM journal_entry_lines l
 	JOIN journal_entries e ON e.id = l.journal_entry_id
-	WHERE e.user_id = $1
+	JOIN accounts a ON a.id = l.account_id
+	WHERE e.user_id = $1 AND e.datetime >= $2 AND e.datetime < $3
 `
 
-func (r *journalRepository) GetSummaryByUserID(ctx context.Context, userID int64) (*journal.JournalSummary, error) {
+func (r *journalRepository) GetMonthlySummaryByUserID(ctx context.Context, userID int64, start, end time.Time) (*journal.MonthlySummary, error) {
 	log := logger.FromContext(ctx)
-	var summary journal.JournalSummary
-	err := r.db(ctx).QueryRow(ctx, getSummaryByUserIDQuery, userID).
-		Scan(&summary.TotalDebit, &summary.TotalCredit, &summary.TransactionCount)
+	var summary journal.MonthlySummary
+	err := r.db(ctx).QueryRow(ctx, getMonthlySummaryByUserIDQuery, userID, start, end).
+		Scan(&summary.Income, &summary.Expense, &summary.TransactionCount)
 	if err != nil {
-		log.Error("repo: failed to get journal summary", "user_id", userID, "error", err)
+		log.Error("repo: failed to get monthly summary", "user_id", userID, "error", err)
 		return nil, err
 	}
 	return &summary, nil

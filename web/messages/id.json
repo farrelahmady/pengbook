@@ -15,8 +15,17 @@
 		"summaryCredit": {
 			"label": "Total Kredit"
 		},
+		"summaryIncome": {
+			"label": "Pemasukan",
+			"sub": "Bulan ini"
+		},
+		"summaryExpense": {
+			"label": "Pengeluaran",
+			"sub": "Bulan ini"
+		},
 		"summarytransaction": {
-			"label": "Transaksi"
+			"label": "Transaksi",
+			"sub": "Bulan ini"
 		},
 		"transactionFilterChips": {
 			"all": "Semua",

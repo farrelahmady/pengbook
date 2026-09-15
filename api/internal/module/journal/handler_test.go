@@ -1055,6 +1055,204 @@ func TestHandler_Export_Success(t *testing.T) {
 	}
 }
 
+func TestHandler_Summary_WithMonth_Success(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accKas := createAccount(t, tc, userID, "1.01.01.01")
+	accPendapatan := createAccount(t, tc, userID, "4.01.01.01")
+	accBeban := createAccount(t, tc, userID, "5.01.01.01")
+
+	create := func(date, desc string, lines []journal.JournalLineDto) {
+		t.Helper()
+		if _, err := tc.jnlSvc.Create(ctx, userID, journal.CreateJournalRequest{
+			Date: date, Description: desc, Lines: lines,
+		}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+
+	// March: income 500k, expense 200k, 2 transactions
+	create("2026-03-10T12:00:00+07:00", "Penjualan", []journal.JournalLineDto{
+		{AccountID: accKas, Debit: 500000, Credit: 0},
+		{AccountID: accPendapatan, Debit: 0, Credit: 500000},
+	})
+	create("2026-03-15T12:00:00+07:00", "Beban operasional", []journal.JournalLineDto{
+		{AccountID: accBeban, Debit: 200000, Credit: 0},
+		{AccountID: accKas, Debit: 0, Credit: 200000},
+	})
+	// April: must be excluded from the March summary
+	create("2026-04-05T12:00:00+07:00", "Penjualan April", []journal.JournalLineDto{
+		{AccountID: accKas, Debit: 999000, Credit: 0},
+		{AccountID: accPendapatan, Debit: 0, Credit: 999000},
+	})
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Full ISO instant with client offset; backend derives March bounds in +07:00.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/summary?month=2026-03-10T12%3A00%3A00%2B07%3A00", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+
+	var summary struct {
+		Month            string  `json:"month"`
+		Income           float64 `json:"income"`
+		Expense          float64 `json:"expense"`
+		TransactionCount int64   `json:"transactionCount"`
+	}
+	if err := json.Unmarshal(resp.Data, &summary); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+
+	// No all-time fields may leak into the response.
+	var raw map[string]interface{}
+	if err := json.Unmarshal(resp.Data, &raw); err != nil {
+		t.Fatalf("unmarshal raw summary: %v", err)
+	}
+	for _, key := range []string{"totalDebit", "totalCredit"} {
+		if _, exists := raw[key]; exists {
+			t.Errorf("expected no %q field in summary response", key)
+		}
+	}
+
+	// Monthly slice covers March only.
+	if summary.Month != "2026-03" {
+		t.Errorf("expected month 2026-03, got %s", summary.Month)
+	}
+	if summary.Income != 500000 {
+		t.Errorf("expected income 500000, got %v", summary.Income)
+	}
+	if summary.Expense != 200000 {
+		t.Errorf("expected expense 200000, got %v", summary.Expense)
+	}
+	if summary.TransactionCount != 2 {
+		t.Errorf("expected transactionCount 2, got %d", summary.TransactionCount)
+	}
+
+	// Cleanup
+	entries, _ := tc.jnlRepo.FindEntriesByUserID(ctx, userID, journal.EntryFilter{Limit: 100})
+	for _, e := range entries {
+		tc.jnlRepo.DeleteEntry(ctx, e.ID)
+	}
+}
+
+func TestHandler_Summary_ClientTimezone(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accKas := createAccount(t, tc, userID, "1.01.01.01")
+	accPendapatan := createAccount(t, tc, userID, "4.01.01.01")
+
+	// Entry on 2026-03-10 noon Jakarta.
+	if _, err := tc.jnlSvc.Create(ctx, userID, journal.CreateJournalRequest{
+		Date:        "2026-03-10T12:00:00+07:00",
+		Description: "Penjualan",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accKas, Debit: 500000, Credit: 0},
+			{AccountID: accPendapatan, Debit: 0, Credit: 500000},
+		},
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	get := func(monthParam string) map[string]interface{} {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/summary?month="+monthParam, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("month %s: expected status 200, got %d: %s", monthParam, w.Code, w.Body.String())
+		}
+		var resp apiResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		var summary map[string]interface{}
+		if err := json.Unmarshal(resp.Data, &summary); err != nil {
+			t.Fatalf("unmarshal summary: %v", err)
+		}
+		return summary
+	}
+
+	// Same wall-clock intent, different client zones.
+	jakarta := get("2026-03-10T12%3A00%3A00%2B07%3A00")
+	if jakarta["month"] != "2026-03" || jakarta["income"] != 500000.0 {
+		t.Errorf("jakarta offset: expected 2026-03/500000, got %+v", jakarta)
+	}
+
+	// 2026-10-01 00:30 +07:00 is still 2026-09-30 in UTC: a UTC-based parser
+	// would wrongly return September (with data). Offset-aware parsing must
+	// return October (empty).
+	october := get("2026-10-01T00%3A30%3A00%2B07%3A00")
+	if october["month"] != "2026-10" {
+		t.Errorf("expected month 2026-10, got %+v", october)
+	}
+	if october["income"] != 0.0 || october["transactionCount"] != 0.0 {
+		t.Errorf("expected empty October slice, got %+v", october)
+	}
+
+	// Cleanup
+	entries, _ := tc.jnlRepo.FindEntriesByUserID(ctx, userID, journal.EntryFilter{Limit: 100})
+	for _, e := range entries {
+		tc.jnlRepo.DeleteEntry(ctx, e.ID)
+	}
+}
+
+func TestHandler_Summary_InvalidMonth(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/summary?month=bukan-bulan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Summary_Month_Unauthorized(t *testing.T) {
+	tc := setup(t)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	// No auth middleware
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/summary?month=2026-03", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestHandler_Export_Unauthorized(t *testing.T) {
 	tc := setup(t)
 

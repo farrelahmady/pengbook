@@ -47,26 +47,32 @@ export const journalService = {
 		return res.data.data;
 	},
 
-	getTotalSummary: async (): Promise<{
-		totalDebit: number;
-		totalCredit: number;
+	getTotalSummary: async (month?: string): Promise<{
+		month: string;
+		income: number;
+		expense: number;
 		transactionCount: number;
 	}> => {
 		const client = authHttpClient();
 
-		logger.debug("Fetching journal summary");
+		// encodeURIComponent: ISO instants contain + and : which break raw query strings.
+		const query = month ? `?month=${encodeURIComponent(month)}` : "";
+
+		logger.debug("Fetching journal summary", { month });
 
 		const res = await client.get<
 			ApiResponse<{
-				totalDebit: number;
-				totalCredit: number;
+				month: string;
+				income: number;
+				expense: number;
 				transactionCount: number;
 			}>
-		>(`${API_BASE}/journals/summary`);
+		>(`${API_BASE}/journals/summary${query}`);
 
 		logger.info("Journal summary fetched", {
-			totalDebit: res.data.data.totalDebit,
-			totalCredit: res.data.data.totalCredit,
+			month: res.data.data.month,
+			income: res.data.data.income,
+			expense: res.data.data.expense,
 			transactionCount: res.data.data.transactionCount,
 		});
 

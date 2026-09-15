@@ -18,6 +18,7 @@ var (
 	ErrNotBalanced    = errors.New("journal entry lines are not balanced (debit != credit)")
 	ErrInvalidLines   = errors.New("journal entry must have at least 2 lines")
 	ErrNotPostingAccount = errors.New("account is not a posting account (level != 3)")
+	ErrInvalidMonth   = errors.New("invalid month format, expected YYYY-MM")
 )
 
 // Service is the PORT (interface) for journal business logic.
@@ -25,8 +26,10 @@ type Service interface {
 	// GetAllScrollView returns paginated journal entries with cursor-based pagination.
 	GetAllScrollView(ctx context.Context, userID int64, filter ListRequest) (*CursorPageResponse, error)
 
-	// GetTotalSummary returns aggregate totals for a user.
-	GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error)
+	// GetTotalSummary returns aggregate totals plus the monthly slice
+	// (net revenue, net expense, monthly count). Month is a full RFC3339
+	// instant; bounds are derived in its own zone. Empty means now.
+	GetTotalSummary(ctx context.Context, userID int64, month string) (*JournalSummary, error)
 
 	// Create creates a new journal entry with balanced lines.
 	Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error)
@@ -124,16 +127,37 @@ func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter Lis
 	}, nil
 }
 
-func (s *service) GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error) {
+func (s *service) GetTotalSummary(ctx context.Context, userID int64, month string) (*JournalSummary, error) {
 	log := logger.FromContext(ctx)
 
-	summary, err := s.repo.GetSummaryByUserID(ctx, userID)
+	// The month param is a full RFC3339 instant sent by the client. Month
+	// bounds are derived in the instant's own zone (the client timezone
+	// travels inside the ISO offset), so each user gets their own calendar
+	// month regardless of where the server runs or what UTC says.
+	if month == "" {
+		month = time.Now().Format(time.RFC3339)
+	}
+	now, err := time.Parse(time.RFC3339, month)
 	if err != nil {
-		log.Error("journal GetTotalSummary: failed to get summary", "user_id", userID, "error", err)
+		log.Warn("journal GetTotalSummary: invalid month", "user_id", userID, "month", month)
+		return nil, ErrInvalidMonth
+	}
+	loc := now.Location()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
+
+	monthly, err := s.repo.GetMonthlySummaryByUserID(ctx, userID, start, end)
+	if err != nil {
+		log.Error("journal GetTotalSummary: failed to get summary", "user_id", userID, "month", month, "error", err)
 		return nil, err
 	}
 
-	return summary, nil
+	return &JournalSummary{
+		Month:            start.Format("2006-01"),
+		Income:           monthly.Income,
+		Expense:          monthly.Expense,
+		TransactionCount: monthly.TransactionCount,
+	}, nil
 }
 
 func (s *service) Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error) {
