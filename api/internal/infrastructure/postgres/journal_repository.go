@@ -36,12 +36,6 @@ const createEntryQuery = `
 	RETURNING id, created_at, updated_at
 `
 
-const createLineQuery = `
-	INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit)
-	VALUES ($1, $2, $3, $4)
-	RETURNING id, created_at
-`
-
 func (r *journalRepository) createEntryHeader(ctx context.Context, entry *journal.JournalEntry) error {
 	log := logger.FromContext(ctx)
 	err := r.db(ctx).QueryRow(ctx, createEntryQuery,
@@ -72,16 +66,12 @@ func (r *journalRepository) CreateEntry(ctx context.Context, entry *journal.Jour
 }
 
 func (r *journalRepository) createLines(ctx context.Context, entryID int64, lines []journal.JournalEntryLine) error {
-	for i := range lines {
-		lines[i].JournalEntryID = entryID
-		err := r.db(ctx).QueryRow(ctx, createLineQuery,
-			entryID, lines[i].AccountID, lines[i].Debit, lines[i].Credit,
-		).Scan(&lines[i].ID, &lines[i].CreatedAt)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	// Single-entry case of the bulk path: one multi-row INSERT, no RETURNING.
+	// NOTE: line IDs/CreatedAt are left unset. This is harmless: callers
+	// (Create/Update) refetch via FindEntryByID, and no consumer reads
+	// in-memory line IDs. JournalEntryID is still stamped via the shared
+	// backing array in createLinesBulk.
+	return r.createLinesBulk(ctx, []journal.JournalEntry{{ID: entryID, Lines: lines}})
 }
 
 // bulkLinesChunkSize caps rows per multi-row INSERT so the parameter count
