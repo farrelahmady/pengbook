@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { Plus, Minus } from "lucide-react";
-import { formatNumber, parseDecimal } from "@/lib/utils";
+import { dateInputToISO, formatNumber, parseDecimal } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
+import { accountService } from "@/services/account";
 import { JournalEntry } from "@/types";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("EditAdvancedForm");
 
 interface JournalLine {
 	accountId: string;
@@ -26,6 +29,12 @@ interface EditAdvancedFormProps {
 export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) {
 	const t = useTranslations("journalPage.advanced");
 	const queryClient = useQueryClient();
+
+	const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery({
+		queryKey: queryKeys.accounts.posting,
+		queryFn: () => accountService.getPostingAccounts(),
+	});
+
 	const [date, setDate] = useState(journal.date.slice(0, 10));
 	const [description, setDesc] = useState(journal.description ?? "");
 	const [lines, setLines] = useState<JournalLine[]>(
@@ -67,7 +76,7 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 
 		try {
 			await journalService.update(journal.id, {
-				date: new Date(date).toISOString(),
+				date: dateInputToISO(date),
 				description: description || undefined,
 				lines: lines.map((l) => ({
 					accountId: l.accountId,
@@ -146,9 +155,10 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 								value={line.accountId}
 								onChange={(e) => updateLine(i, "accountId", e.target.value)}
 								className="text-[11px] bg-secondary-50 border border-secondary-200 rounded-lg px-2 py-1.5 w-full appearance-none text-secondary-700 outline-none focus:border-primary-400"
+								disabled={isLoadingAccounts}
 							>
-								<option value="">{t("accountPlaceholder")}</option>
-								{POSTING_ACCOUNTS.map((a) => (
+								<option value="">{isLoadingAccounts ? "Loading..." : t("accountPlaceholder")}</option>
+								{postingAccounts.map((a) => (
 									<option key={a.id} value={a.id}>
 										{a.code}
 									</option>

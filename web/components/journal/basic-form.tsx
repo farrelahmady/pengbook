@@ -4,171 +4,193 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
-import { parseDecimal } from "@/lib/utils";
+import { accountService } from "@/services/account";
+import { dateInputToISO, parseDecimal, todayLocalDate } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("BasicForm");
 
 interface BasicFormProps {
-  onSuccess: () => void;
+	onSuccess: () => void;
 }
 
 export function BasicForm({ onSuccess }: BasicFormProps) {
-  const t = useTranslations("journalPage.basic");
-  const queryClient = useQueryClient();
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [description, setDesc] = useState("");
-  const [fromAccount, setFrom] = useState("");
-  const [toAccount, setTo] = useState("");
-  const [amount, setAmount] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+	const t = useTranslations("journalPage.basic");
+	const queryClient = useQueryClient();
+	const [date, setDate] = useState(todayLocalDate());
+	const [description, setDesc] = useState("");
+	const [fromAccount, setFrom] = useState("");
+	const [toAccount, setTo] = useState("");
+	const [amount, setAmount] = useState("");
+	const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleSubmit() {
-    if (!fromAccount || !toAccount || !amount) {
-      toast.error(t("toastValidation"));
-      return;
-    }
-    if (fromAccount === toAccount) {
-      toast.error(t("toastSameAccount"));
-      return;
-    }
+	const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery(
+		{
+			queryKey: queryKeys.accounts.posting,
+			queryFn: () => accountService.getPostingAccounts(),
+		},
+	);
 
-    const toastId = toast.loading(t("toastLoading"));
-    setIsSubmitting(true);
+	async function handleSubmit() {
+		if (!fromAccount || !toAccount || !amount) {
+			toast.error(t("toastValidation"));
+			return;
+		}
+		if (fromAccount === toAccount) {
+			toast.error(t("toastSameAccount"));
+			return;
+		}
 
-    try {
-      const from = POSTING_ACCOUNTS.find((a) => a.id === fromAccount);
-      const to = POSTING_ACCOUNTS.find((a) => a.id === toAccount);
+		const toastId = toast.loading(t("toastLoading"));
+		setIsSubmitting(true);
 
-      await journalService.create({
-        date: new Date(date).toISOString(),
-        description: description || undefined,
-        lines: [
-          { accountId: Number(toAccount), debit: parseDecimal(amount), credit: 0 },
-          { accountId: Number(fromAccount), debit: 0, credit: parseDecimal(amount) },
-        ],
-      });
+		try {
+			const from = postingAccounts.find((a) => a.id === Number(fromAccount));
+			const to = postingAccounts.find((a) => a.id === Number(toAccount));
 
-      toast.success(t("toastSuccess"), { id: toastId });
-      queryClient.invalidateQueries({ queryKey: queryKeys.journals.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.journals.summary });
-      onSuccess();
-    } catch (err) {
-      toast.error(t("toastError"), { id: toastId });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+			await journalService.create({
+				date: dateInputToISO(date),
+				description: description || undefined,
+				lines: [
+					{
+						accountId: Number(toAccount),
+						debit: parseDecimal(amount),
+						credit: 0,
+					},
+					{
+						accountId: Number(fromAccount),
+						debit: 0,
+						credit: parseDecimal(amount),
+					},
+				],
+			});
 
-  const selectClass =
-    "w-full bg-secondary-50 border border-secondary-200 rounded-xl px-3.5 py-3 text-[13px] text-secondary-800 outline-none focus:border-primary-400 appearance-none cursor-pointer";
-  const labelClass =
-    "text-[11px] font-semibold uppercase tracking-[0.5px] text-secondary-400 mb-1.5 block";
+			toast.success(t("toastSuccess"), { id: toastId });
+			queryClient.invalidateQueries({ queryKey: queryKeys.journals.all });
+			queryClient.invalidateQueries({ queryKey: queryKeys.journals.summary });
+			onSuccess();
+		} catch (err) {
+			toast.error(t("toastError"), { id: toastId });
+		} finally {
+			setIsSubmitting(false);
+		}
+	}
 
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Date */}
-      <div>
-        <label className={labelClass}>{t("date")}</label>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className={selectClass}
-        />
-      </div>
+	const selectClass =
+		"w-full bg-secondary-50 border border-secondary-200 rounded-xl px-3.5 py-3 text-[13px] text-secondary-800 outline-none focus:border-primary-400 appearance-none cursor-pointer";
+	const labelClass =
+		"text-[11px] font-semibold uppercase tracking-[0.5px] text-secondary-400 mb-1.5 block";
 
-      {/* Description */}
-      <div>
-        <label className={labelClass}>{t("description")}</label>
-        <input
-          type="text"
-          placeholder={t("descriptionPlaceholder")}
-          value={description}
-          onChange={(e) => setDesc(e.target.value)}
-          className={selectClass}
-        />
-      </div>
+	return (
+		<div className="flex flex-col gap-4">
+			{/* Date */}
+			<div>
+				<label className={labelClass}>{t("date")}</label>
+				<input
+					type="date"
+					value={date}
+					onChange={(e) => setDate(e.target.value)}
+					className={selectClass}
+				/>
+			</div>
 
-      {/* From */}
-      <div>
-        <label className={labelClass}>{t("fromAccount")}</label>
-        <select
-          value={fromAccount}
-          onChange={(e) => setFrom(e.target.value)}
-          className={selectClass}
-        >
-          <option value="">{t("fromPlaceholder")}</option>
-          {POSTING_ACCOUNTS.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.code} · {a.name}
-            </option>
-          ))}
-        </select>
-      </div>
+			{/* Description */}
+			<div>
+				<label className={labelClass}>{t("description")}</label>
+				<input
+					type="text"
+					placeholder={t("descriptionPlaceholder")}
+					value={description}
+					onChange={(e) => setDesc(e.target.value)}
+					className={selectClass}
+				/>
+			</div>
 
-      {/* Arrow visual */}
-      <div className="flex items-center gap-3 -my-1">
-        <div className="flex-1 border-t-2 border-dashed border-secondary-200" />
-        <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
-          <ArrowRight size={14} className="text-primary-500" />
-        </div>
-        <div className="flex-1 border-t-2 border-dashed border-secondary-200" />
-      </div>
+			{/* From */}
+			<div>
+				<label className={labelClass}>{t("fromAccount")}</label>
+				<select
+					value={fromAccount}
+					onChange={(e) => setFrom(e.target.value)}
+					className={selectClass}
+					disabled={isLoadingAccounts}
+				>
+					<option value="">
+						{isLoadingAccounts ? "Loading..." : t("fromPlaceholder")}
+					</option>
+					{postingAccounts.map((a) => (
+						<option key={a.id} value={a.id}>
+							{a.code} · {a.name}
+						</option>
+					))}
+				</select>
+			</div>
 
-      {/* To */}
-      <div>
-        <label className={labelClass}>{t("toAccount")}</label>
-        <select
-          value={toAccount}
-          onChange={(e) => setTo(e.target.value)}
-          className={selectClass}
-        >
-          <option value="">{t("toPlaceholder")}</option>
-          {POSTING_ACCOUNTS.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.code} · {a.name}
-            </option>
-          ))}
-        </select>
-      </div>
+			{/* Arrow visual */}
+			<div className="flex items-center gap-3 -my-1">
+				<div className="flex-1 border-t-2 border-dashed border-secondary-200" />
+				<div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
+					<ArrowRight size={14} className="text-primary-500" />
+				</div>
+				<div className="flex-1 border-t-2 border-dashed border-secondary-200" />
+			</div>
 
-      {/* Amount */}
-      <div>
-        <label className={labelClass}>{t("amount")}</label>
-        <div className="relative">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-[13px] text-secondary-400">
-            Rp
-          </span>
-          <input
-            type="number"
-            placeholder="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className={`${selectClass} pl-10 font-mono text-[16px]`}
-          />
-        </div>
-      </div>
+			{/* To */}
+			<div>
+				<label className={labelClass}>{t("toAccount")}</label>
+				<select
+					value={toAccount}
+					onChange={(e) => setTo(e.target.value)}
+					className={selectClass}
+					disabled={isLoadingAccounts}
+				>
+					<option value="">
+						{isLoadingAccounts ? "Loading..." : t("toPlaceholder")}
+					</option>
+					{postingAccounts.map((a) => (
+						<option key={a.id} value={a.id}>
+							{a.code} · {a.name}
+						</option>
+					))}
+				</select>
+			</div>
 
-      {/* Auto hint */}
-      <div className="bg-primary-50 rounded-xl px-3.5 py-3 text-[12px] text-primary-700 leading-relaxed">
-        <span className="font-semibold">{t("hint")}</span>
-        <br />
-        <span className="font-mono text-[11px]">
-          {t("hintDetail")}
-        </span>
-      </div>
+			{/* Amount */}
+			<div>
+				<label className={labelClass}>{t("amount")}</label>
+				<div className="relative">
+					<span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-[13px] text-secondary-400">
+						Rp
+					</span>
+					<input
+						type="number"
+						placeholder="0"
+						value={amount}
+						onChange={(e) => setAmount(e.target.value)}
+						className={`${selectClass} pl-10 font-mono text-[16px]`}
+					/>
+				</div>
+			</div>
 
-      {/* Submit */}
-      <button
-        onClick={handleSubmit}
-        disabled={isSubmitting}
-        className="w-full bg-primary-500 text-white font-semibold text-[15px] py-3.5 rounded-xl
+			{/* Auto hint */}
+			<div className="bg-primary-50 rounded-xl px-3.5 py-3 text-[12px] text-primary-700 leading-relaxed">
+				<span className="font-semibold">{t("hint")}</span>
+				<br />
+				<span className="font-mono text-[11px]">{t("hintDetail")}</span>
+			</div>
+
+			{/* Submit */}
+			<button
+				onClick={handleSubmit}
+				disabled={isSubmitting}
+				className="w-full bg-primary-500 text-white font-semibold text-[15px] py-3.5 rounded-xl
                    active:scale-[0.98] transition-transform mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {t("submit")}
-      </button>
-    </div>
-  );
+			>
+				{t("submit")}
+			</button>
+		</div>
+	);
 }

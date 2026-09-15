@@ -57,6 +57,12 @@ func GetUserID(ctx context.Context) int64 {
 	return 0
 }
 
+// ContextWithUserID returns a new context with the given user ID.
+// Useful for testing handlers that require authentication.
+func ContextWithUserID(ctx context.Context, userID int64) context.Context {
+	return context.WithValue(ctx, userIDKey, userID)
+}
+
 // Auth returns a middleware that validates JWT tokens and extracts user ID.
 func Auth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

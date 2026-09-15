@@ -1,0 +1,843 @@
+package journal_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/xuri/excelize/v2"
+
+	"pengbook/api/internal/middleware"
+	"pengbook/api/internal/module/account"
+	"pengbook/api/internal/module/journal"
+)
+
+// apiResponse is the standard JSON response wrapper.
+type apiResponse struct {
+	Success bool            `json:"success"`
+	Data    json.RawMessage `json:"data,omitempty"`
+	Message string          `json:"message,omitempty"`
+}
+
+// authMiddleware creates a middleware that injects userID into context.
+func authMiddleware(userID int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := middleware.ContextWithUserID(r.Context(), userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// createMultipartRequest creates a multipart form request with a CSV file.
+func createMultipartRequest(t *testing.T, url, csvContent, filename string) *http.Request {
+	t.Helper()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+
+	if _, err := part.Write([]byte(csvContent)); err != nil {
+		t.Fatalf("write file content: %v", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, url, body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
+}
+
+func TestHandler_GetAllScrollView(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	// Create a journal entry first
+	entry := &journal.JournalEntry{
+		UserID:      userID,
+		Date:        time.Now(),
+		Description: "Handler test entry",
+		Lines: []journal.JournalEntryLine{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	}
+	if err := tc.jnlRepo.CreateEntry(ctx, entry); err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+	defer tc.jnlRepo.DeleteEntry(ctx, entry.ID)
+
+	// Setup router with handler and auth middleware
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Make request
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals?limit=10", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Check response
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+}
+
+func TestHandler_GetAllScrollView_Unauthorized(t *testing.T) {
+	tc := setup(t)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	// No auth middleware
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_GetTotalSummary(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/summary", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+}
+
+func TestHandler_Create_Success(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	body := journal.CreateJournalRequest{
+		Date:        time.Now().Format(time.RFC3339),
+		Description: "Handler create test",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/journals", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+
+	// Cleanup: find and delete the created entry
+	entries, _ := tc.jnlRepo.FindEntriesByUserID(ctx, userID, journal.EntryFilter{Limit: 10})
+	for _, e := range entries {
+		if e.Description == "Handler create test" {
+			tc.jnlRepo.DeleteEntry(ctx, e.ID)
+			break
+		}
+	}
+}
+
+func TestHandler_Create_Unbalanced(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	body := journal.CreateJournalRequest{
+		Date:        time.Now().Format(time.RFC3339),
+		Description: "Unbalanced entry",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 200000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/journals", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Create_InvalidBody(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/journals", bytes.NewReader([]byte("invalid json")))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Create_InvalidLines(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	body := journal.CreateJournalRequest{
+		Date:        time.Now().Format(time.RFC3339),
+		Description: "Only one line",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/journals", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Update_Success(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	// Create entry first
+	entry := &journal.JournalEntry{
+		UserID:      userID,
+		Date:        time.Now(),
+		Description: "Original",
+		Lines: []journal.JournalEntryLine{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	}
+	if err := tc.jnlRepo.CreateEntry(ctx, entry); err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+	defer tc.jnlRepo.DeleteEntry(ctx, entry.ID)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	body := journal.UpdateJournalRequest{
+		Date:        time.Now().Format(time.RFC3339),
+		Description: "Updated",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 200000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 200000},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	url := "/api/v1/journals/" + strconv.FormatInt(entry.ID, 10)
+	req := httptest.NewRequest(http.MethodPut, url, bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+}
+
+func TestHandler_Update_NotFound(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	body := journal.UpdateJournalRequest{
+		Date:        time.Now().Format(time.RFC3339),
+		Description: "Not found",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/journals/999999", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_Success(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	// Get account codes
+	acc1, _ := tc.accRepo.FindByID(ctx, accID1)
+	acc2, _ := tc.accRepo.FindByID(ctx, accID2)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Create CSV content
+	date := time.Now().Format("2006-01-02")
+	csvContent := fmt.Sprintf(`Tanggal,Deskripsi,Kode Akun,Debit,Kredit
+%s,Upload test,%s,100000,0
+%s,Upload test,%s,0,100000`, date, acc1.Code, date, acc2.Code)
+
+	req := createMultipartRequest(t, "/api/v1/journals/upload", csvContent, "test.csv")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+
+	// Cleanup
+	entries, _ := tc.jnlRepo.FindEntriesByUserID(ctx, userID, journal.EntryFilter{Limit: 100})
+	for _, e := range entries {
+		if e.Description == "Upload test" {
+			tc.jnlRepo.DeleteEntry(ctx, e.ID)
+		}
+	}
+}
+
+func TestHandler_Upload_MultipleEntries(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	acc1, _ := tc.accRepo.FindByID(ctx, accID1)
+	acc2, _ := tc.accRepo.FindByID(ctx, accID2)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// CSV with 2 different entries (different dates)
+	csvContent := fmt.Sprintf(`Tanggal,Deskripsi,Kode Akun,Debit,Kredit
+2026-04-21,Entry 1,%s,100000,0
+2026-04-21,Entry 1,%s,0,100000
+2026-04-22,Entry 2,%s,200000,0
+2026-04-22,Entry 2,%s,0,200000`, acc1.Code, acc2.Code, acc1.Code, acc2.Code)
+
+	req := createMultipartRequest(t, "/api/v1/journals/upload", csvContent, "test.csv")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+
+	// Cleanup
+	entries, _ := tc.jnlRepo.FindEntriesByUserID(ctx, userID, journal.EntryFilter{Limit: 100})
+	for _, e := range entries {
+		if strings.HasPrefix(e.Description, "Entry ") {
+			tc.jnlRepo.DeleteEntry(ctx, e.ID)
+		}
+	}
+}
+
+func TestHandler_Upload_Unbalanced(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	acc1, _ := tc.accRepo.FindByID(ctx, accID1)
+	acc2, _ := tc.accRepo.FindByID(ctx, accID2)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Unbalanced entry (debit != credit)
+	date := time.Now().Format("2006-01-02")
+	csvContent := fmt.Sprintf(`Tanggal,Deskripsi,Kode Akun,Debit,Kredit
+%s,Unbalanced,%s,200000,0
+%s,Unbalanced,%s,0,100000`, date, acc1.Code, date, acc2.Code)
+
+	req := createMultipartRequest(t, "/api/v1/journals/upload", csvContent, "test.csv")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_InvalidCSV_NotPostingAccount(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+
+	// Create a header account (level < 3)
+	headerAcc, _ := tc.accSvc.Create(ctx, userID, account.CreateAccountRequest{
+		Code: "1.01.00.00",
+		Name: "Header Account",
+	})
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+	acc2, _ := tc.accRepo.FindByID(ctx, accID2)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Use non-posting account
+	date := time.Now().Format("2006-01-02")
+	csvContent := fmt.Sprintf(`Tanggal,Deskripsi,Kode Akun,Debit,Kredit
+%s,Test,%s,100000,0
+%s,Test,%s,0,100000`, date, headerAcc.Code, date, acc2.Code)
+
+	req := createMultipartRequest(t, "/api/v1/journals/upload", csvContent, "test.csv")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_NoFile(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Send request without file
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/journals/upload", nil)
+	req.Header.Set("Content-Type", "multipart/form-data")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_WrongExtension(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Send .txt file instead of .csv
+	req := createMultipartRequest(t, "/api/v1/journals/upload", "some content", "test.txt")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_EmptyCSV(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Send empty CSV
+	csvContent := `Tanggal,Deskripsi,Kode Akun,Debit,Kredit`
+	req := createMultipartRequest(t, "/api/v1/journals/upload", csvContent, "empty.csv")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_InvalidCSVFormat(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// CSV with missing required column
+	csvContent := `Tanggal,Deskripsi,Kode Akun
+2026-04-21,Test,1.01.01.01`
+	req := createMultipartRequest(t, "/api/v1/journals/upload", csvContent, "invalid.csv")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_Unauthorized(t *testing.T) {
+	tc := setup(t)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	// No auth middleware
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	csvContent := `Tanggal,Deskripsi,Kode Akun,Debit,Kredit
+2026-04-21,Test,1.01.01.01,100000,0`
+	req := createMultipartRequest(t, "/api/v1/journals/upload", csvContent, "test.csv")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ── DownloadTemplate Tests ──────────────────────────────────────────────────
+
+func TestHandler_DownloadTemplate_Success(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+	// Create some posting accounts
+	createAccount(t, tc, userID, "1.01.01.01")
+	createAccount(t, tc, userID, "4.01.01.01")
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/template", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Check content type
+	contentType := w.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "spreadsheetml") {
+		t.Errorf("expected Excel content type, got %s", contentType)
+	}
+
+	// Check content disposition
+	disposition := w.Header().Get("Content-Disposition")
+	if !strings.Contains(disposition, "template-jurnal.xlsx") {
+		t.Errorf("expected attachment filename, got %s", disposition)
+	}
+
+	// Check body is not empty
+	if w.Body.Len() == 0 {
+		t.Fatal("expected non-empty response body")
+	}
+}
+
+func TestHandler_DownloadTemplate_Unauthorized(t *testing.T) {
+	tc := setup(t)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	// No auth middleware
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/template", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_DownloadTemplate_NoAccounts(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/template", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Should still return a template (with example accounts)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ── Upload Excel Tests ─────────────────────────────────────────────────────
+
+func TestHandler_Upload_Excel_Success(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	// Get account codes
+	acc1, _ := tc.accRepo.FindByID(ctx, accID1)
+	acc2, _ := tc.accRepo.FindByID(ctx, accID2)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Create Excel file
+	f := excelize.NewFile()
+	defer f.Close()
+	sheet := "Sheet1"
+	f.SetSheetName("Sheet1", sheet)
+
+	// Header
+	f.SetCellValue(sheet, "A1", "Tanggal")
+	f.SetCellValue(sheet, "B1", "Deskripsi")
+	f.SetCellValue(sheet, "C1", "Kode Akun")
+	f.SetCellValue(sheet, "D1", "Debit")
+	f.SetCellValue(sheet, "E1", "Kredit")
+
+	// Data rows
+	date := time.Now().Format("2006-01-02")
+	f.SetCellValue(sheet, "A2", date)
+	f.SetCellValue(sheet, "B2", "Upload Excel test")
+	f.SetCellValue(sheet, "C2", acc1.Code)
+	f.SetCellValue(sheet, "D2", 100000)
+	f.SetCellValue(sheet, "E2", 0)
+
+	f.SetCellValue(sheet, "A3", date)
+	f.SetCellValue(sheet, "B3", "Upload Excel test")
+	f.SetCellValue(sheet, "C3", acc2.Code)
+	f.SetCellValue(sheet, "D3", 0)
+	f.SetCellValue(sheet, "E3", 100000)
+
+	buffer, err := f.WriteToBuffer()
+	if err != nil {
+		t.Fatalf("failed to create Excel: %v", err)
+	}
+
+	// Create multipart request
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "test.xlsx")
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	part.Write(buffer.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/journals/upload", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+
+	// Cleanup
+	entries, _ := tc.jnlRepo.FindEntriesByUserID(ctx, userID, journal.EntryFilter{Limit: 100})
+	for _, e := range entries {
+		if e.Description == "Upload Excel test" {
+			tc.jnlRepo.DeleteEntry(ctx, e.ID)
+		}
+	}
+}
+
+func TestHandler_Upload_WrongExtension_Excel(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Send .txt file
+	req := createMultipartRequest(t, "/api/v1/journals/upload", "some content", "test.txt")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Upload_EmptyExcel(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	// Create empty Excel
+	f := excelize.NewFile()
+	defer f.Close()
+	buffer, _ := f.WriteToBuffer()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "empty.xlsx")
+	part.Write(buffer.Bytes())
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/journals/upload", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}

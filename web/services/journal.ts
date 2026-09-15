@@ -11,15 +11,13 @@ const logger = createLogger("journal.service");
 const API_BASE = "/api/v1";
 
 export const journalService = {
-	getAllScrollView: async (
-		request: {
-			limit: number;
-			cursor?: string;
-			startDate?: Date;
-			endDate?: Date;
-			accountIds?: string[];
-		},
-	): Promise<JournalEntryListResponse> => {
+	getAllScrollView: async (request: {
+		limit: number;
+		cursor?: string;
+		startDate?: Date;
+		endDate?: Date;
+		accountIds?: string[];
+	}): Promise<JournalEntryListResponse> => {
 		const client = authHttpClient();
 
 		const params = new URLSearchParams();
@@ -75,9 +73,7 @@ export const journalService = {
 		return res.data.data;
 	},
 
-	create: async (
-		dto: CreateJournalDto,
-	): Promise<JournalEntryListItem> => {
+	create: async (dto: CreateJournalDto): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
 
 		logger.debug("Creating journal entry");
@@ -95,7 +91,7 @@ export const journalService = {
 	},
 
 	update: async (
-		id: string,
+		id: number,
 		dto: CreateJournalDto,
 	): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
@@ -110,5 +106,59 @@ export const journalService = {
 		logger.info("Journal entry updated", { id });
 
 		return res.data.data;
+	},
+
+	createBulk: async (
+		entries: CreateJournalDto[],
+	): Promise<{ count: number }> => {
+		const client = authHttpClient();
+
+		logger.debug("Creating bulk journal entries", { count: entries.length });
+
+		const res = await client.post<ApiResponse<{ count: number }>>(
+			`${API_BASE}/journals/upload`,
+			{ entries },
+		);
+
+		logger.info("Bulk journal entries created", { count: res.data.data.count });
+
+		return res.data.data;
+	},
+
+	uploadFile: async (file: File): Promise<{ count: number }> => {
+		const client = authHttpClient();
+
+		logger.debug("Uploading file", { filename: file.name, size: file.size });
+
+		const formData = new FormData();
+		formData.append("file", file);
+
+		const res = await client.post<ApiResponse<{ count: number }>>(
+			`${API_BASE}/journals/upload`,
+			formData,
+			{
+				headers: {
+					"Content-Type": "multipart/form-data",
+				},
+			},
+		);
+
+		logger.info("File uploaded", { count: res.data.data.count });
+
+		return res.data.data;
+	},
+
+	downloadTemplate: async (): Promise<Blob> => {
+		const client = authHttpClient();
+
+		logger.debug("Downloading journal template");
+
+		const res = await client.get(`${API_BASE}/journals/template`, {
+			responseType: "blob",
+		});
+
+		logger.info("Journal template downloaded");
+
+		return res.data as Blob;
 	},
 };

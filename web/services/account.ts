@@ -1,6 +1,6 @@
 import { authHttpClient } from "@/lib/http-client";
 import { createLogger } from "@/lib/logger";
-import { ApiResponse, AccountSummary } from "@/types";
+import { ApiResponse, AccountSummary, PostingAccount } from "@/types";
 
 const logger = createLogger("account.service");
 
@@ -26,6 +26,22 @@ export const accountService = {
 		logger.info("Account summary fetched", {
 			totalAccounts: res.data.data.totalAccounts,
 			postingAccounts: res.data.data.postingAccounts,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Get posting accounts (level=3) for journal forms.
+	 * Real API call to GET /api/v1/accounts/posting
+	 */
+	getPostingAccounts: async (): Promise<PostingAccount[]> => {
+		logger.debug("Fetching posting accounts");
+		const client = authHttpClient();
+		const res = await client.get<ApiResponse<PostingAccount[]>>(
+			`${API_BASE}/accounts/posting`,
+		);
+		logger.info("Posting accounts fetched", {
+			count: res.data.data.length,
 		});
 		return res.data.data;
 	},
