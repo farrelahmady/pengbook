@@ -2,8 +2,10 @@
 import { JournalScrollView } from "@/components/journal/journal-scroll-view";
 import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, X } from "lucide-react";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
+import { accountService } from "@/services/account";
+import { queryKeys } from "@/lib/query-keys";
 
 const QUICK_FILTERS = ["all", "today", "week", "month"] as const;
 
@@ -15,6 +17,13 @@ export default function JournalList() {
 	const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 	const [showDatePicker, setShowDatePicker] = useState(false);
 	const [showCoaPicker, setShowCoaPicker] = useState(false);
+
+	const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery(
+		{
+			queryKey: queryKeys.accounts.posting,
+			queryFn: () => accountService.getPostingAccounts(),
+		},
+	);
 
 	const hasCustomDate = dateFrom || dateTo;
 	const hasCoaFilter = selectedAccountIds.length > 0;
@@ -192,66 +201,73 @@ export default function JournalList() {
 			)}
 
 			{/* ── COA multi-select ── */}
-			{/* {showCoaPicker && (
+			{showCoaPicker && (
 				<div className="px-4 pb-3">
 					<div className="card-default shadow-card p-3 max-h-60 overflow-y-auto">
 						<p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 mb-2">
 							{t("filter.selectAccount")}
 						</p>
-						<div className="flex flex-col gap-1">
-							{POSTING_ACCOUNTS.map((account) => {
-								const isSelected = selectedAccountIds.includes(account.id);
-								return (
-									<button
-										key={account.id}
-										onClick={() => toggleAccount(account.id)}
-										className={[
-											"flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
-											isSelected
-												? "bg-primary-50 border border-primary-200"
-												: "hover:bg-secondary-50 border border-transparent",
-										].join(" ")}
-									>
-										<div
+						{isLoadingAccounts ? (
+							<p className="text-[12px] text-secondary-400 px-3 py-2">
+								Loading...
+							</p>
+						) : (
+							<div className="flex flex-col gap-1">
+								{postingAccounts.map((account) => {
+									const id = account.id.toString();
+									const isSelected = selectedAccountIds.includes(id);
+									return (
+										<button
+											key={account.id}
+											onClick={() => toggleAccount(id)}
 											className={[
-												"w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+												"flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
 												isSelected
-													? "bg-primary-500 border-primary-500"
-													: "border-secondary-300",
+													? "bg-primary-50 border border-primary-200"
+													: "hover:bg-secondary-50 border border-transparent",
 											].join(" ")}
 										>
-											{isSelected && (
-												<svg
-													width="10"
-													height="8"
-													viewBox="0 0 10 8"
-													fill="none"
-												>
-													<path
-														d="M1 4L3.5 6.5L9 1"
-														stroke="white"
-														strokeWidth="2"
-														strokeLinecap="round"
-														strokeLinejoin="round"
-													/>
-												</svg>
-											)}
-										</div>
-										<div className="flex-1 min-w-0">
-											<p className="text-[12px] font-medium text-secondary-700 truncate">
-												{account.name}
-											</p>
-											<p className="font-mono text-[10px] text-secondary-400">
-												{account.code}
-											</p>
-										</div>
-									</button>
-								);
-							})}
-						</div>
+											<div
+												className={[
+													"w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+													isSelected
+														? "bg-primary-500 border-primary-500"
+														: "border-secondary-300",
+												].join(" ")}
+											>
+												{isSelected && (
+													<svg
+														width="10"
+														height="8"
+														viewBox="0 0 10 8"
+														fill="none"
+													>
+														<path
+															d="M1 4L3.5 6.5L9 1"
+															stroke="white"
+															strokeWidth="2"
+															strokeLinecap="round"
+															strokeLinejoin="round"
+														/>
+													</svg>
+												)}
+											</div>
+											<div className="flex-1 min-w-0">
+												<p className="text-[12px] font-medium text-secondary-700 truncate">
+													{account.name}
+												</p>
+												<p className="font-mono text-[10px] text-secondary-400">
+													{account.code}
+												</p>
+											</div>
+										</button>
+									);
+								})}
+							</div>
+						)}
 					</div>
 				</div>
-			)} */}
+			)}
 
 			{/* ── List ── */}
 			<div className="px-1">

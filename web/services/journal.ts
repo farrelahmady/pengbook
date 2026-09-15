@@ -108,6 +108,18 @@ export const journalService = {
 		return res.data.data;
 	},
 
+	delete: async (id: number): Promise<void> => {
+		const client = authHttpClient();
+
+		logger.debug("Deleting journal entry", { id });
+
+		await client.delete<ApiResponse<{ id: number }>>(
+			`${API_BASE}/journals/${id}`,
+		);
+
+		logger.info("Journal entry deleted", { id });
+	},
+
 	createBulk: async (
 		entries: CreateJournalDto[],
 	): Promise<{ count: number }> => {

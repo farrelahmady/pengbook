@@ -34,6 +34,9 @@ type Service interface {
 	// Update updates an existing journal entry.
 	Update(ctx context.Context, userID int64, entryID int64, req UpdateJournalRequest) (*JournalEntryResponse, error)
 
+	// Delete removes a journal entry and reverses its balance effect.
+	Delete(ctx context.Context, userID int64, entryID int64) error
+
 	// CreateBulk creates multiple journal entries from a bulk upload.
 	CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error)
 
@@ -379,6 +382,61 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 	log.Info("journal updated", "user_id", userID, "entry_id", entryID, "line_count", len(req.Lines))
 	resp := toEntryResponse(updated)
 	return &resp, nil
+}
+
+func (s *service) Delete(ctx context.Context, userID int64, entryID int64) error {
+	log := logger.FromContext(ctx)
+
+	existing, err := s.repo.FindEntryByID(ctx, entryID)
+	if err != nil {
+		log.Error("journal delete: failed to find entry", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+	if existing == nil {
+		log.Warn("journal delete: entry not found", "user_id", userID, "entry_id", entryID)
+		return ErrNotFound
+	}
+	if existing.UserID != userID {
+		log.Warn("journal delete: entry not owned by user", "user_id", userID, "entry_id", entryID)
+		return ErrNotFound
+	}
+
+	// Reverse the entry's balance effect: negate its signed deltas.
+	lookupIDs := make([]int64, 0, len(existing.Lines))
+	for _, l := range existing.Lines {
+		lookupIDs = append(lookupIDs, l.AccountID)
+	}
+	accounts, err := s.accountRepo.FindByIDs(ctx, lookupIDs)
+	if err != nil {
+		log.Error("journal delete: failed to find accounts", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+	reversal := buildBalanceDeltas(existing.Lines, accounts)
+	for id, d := range reversal {
+		reversal[id] = -d
+	}
+
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
+			return err
+		}
+
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the delete back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, reversal); err != nil {
+			log.Error("journal delete: failed to apply balance delta", "user_id", userID, "entry_id", entryID, "error", err)
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Error("journal delete: failed to delete entry", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+
+	log.Info("journal deleted", "user_id", userID, "entry_id", entryID)
+	return nil
 }
 
 func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error) {

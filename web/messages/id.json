@@ -49,7 +49,15 @@
 				"basic": "Basic",
 				"advanced": "Advanced",
 				"upload": "Upload"
-			}
+			},
+			"delete": "Hapus Transaksi",
+			"deleteConfirmTitle": "Hapus transaksi ini?",
+			"deleteConfirmDesc": "Tindakan ini tidak bisa dibatalkan.",
+			"deleteCancel": "Batal",
+			"deleteConfirm": "Ya, Hapus",
+			"toastDeleting": "Menghapus transaksi...",
+			"toastDeleteSuccess": "Transaksi berhasil dihapus",
+			"toastDeleteError": "Gagal menghapus transaksi"
 		},
 		"basic": {
 			"date": "Tanggal",

@@ -812,6 +812,140 @@ func TestHandler_Upload_WrongExtension_Excel(t *testing.T) {
 	}
 }
 
+func TestHandler_Delete_Success(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	// Create entry via service so balance deltas are applied
+	created, err := tc.jnlSvc.Create(ctx, userID, journal.CreateJournalRequest{
+		Date:        time.Now().Format(time.RFC3339),
+		Description: "To be deleted",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	entryID := created.ID
+
+	getBalance := func(accountID int64) float64 {
+		t.Helper()
+		var balance float64
+		if err := tc.pool.QueryRow(ctx,
+			"SELECT COALESCE(balance, 0) FROM account_balances WHERE account_id = $1",
+			accountID).Scan(&balance); err != nil {
+			t.Fatalf("query balance: %v", err)
+		}
+		return balance
+	}
+
+	// Balances must reflect the created entry
+	if got := getBalance(accID1); got != 100000 {
+		t.Fatalf("expected balance 100000 for acc %d after create, got %v", accID1, got)
+	}
+	if got := getBalance(accID2); got != 100000 {
+		t.Fatalf("expected balance 100000 for acc %d after create, got %v", accID2, got)
+	}
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	url := "/api/v1/journals/" + strconv.FormatInt(entryID, 10)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp apiResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message: %s", resp.Message)
+	}
+
+	// Entry must be gone
+	gone, err := tc.jnlRepo.FindEntryByID(ctx, entryID)
+	if err != nil {
+		t.Fatalf("FindEntryByID: %v", err)
+	}
+	if gone != nil {
+		t.Fatalf("expected entry to be deleted, still exists: %d", entryID)
+	}
+
+	// Balances must be reversed to zero
+	if got := getBalance(accID1); got != 0 {
+		t.Fatalf("expected balance 0 for acc %d after delete, got %v", accID1, got)
+	}
+	if got := getBalance(accID2); got != 0 {
+		t.Fatalf("expected balance 0 for acc %d after delete, got %v", accID2, got)
+	}
+}
+
+func TestHandler_Delete_NotFound(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/journals/999999", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Delete_Unauthorized(t *testing.T) {
+	tc := setup(t)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	// No auth middleware
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/journals/1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Delete_InvalidID(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/journals/abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestHandler_Upload_EmptyExcel(t *testing.T) {
 	tc := setup(t)
 	userID := createUser(t, tc)

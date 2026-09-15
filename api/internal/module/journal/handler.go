@@ -32,6 +32,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/", h.Create)
 	r.Post("/upload", h.Upload)
 	r.Put("/{id}", h.Update)
+	r.Delete("/{id}", h.Delete)
 	return r
 }
 
@@ -281,4 +282,30 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, updated)
+}
+
+// Delete handles DELETE /api/v1/journals/{id}
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	entryID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid journal id")
+		return
+	}
+
+	if err := h.service.Delete(r.Context(), userID, entryID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "journal not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "failed to delete journal")
+		return
+	}
+
+	response.Success(w, http.StatusOK, map[string]int64{"id": entryID})
 }
