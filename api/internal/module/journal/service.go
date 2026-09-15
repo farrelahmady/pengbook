@@ -18,6 +18,7 @@ var (
 	ErrNotBalanced    = errors.New("journal entry lines are not balanced (debit != credit)")
 	ErrInvalidLines   = errors.New("journal entry must have at least 2 lines")
 	ErrNotPostingAccount = errors.New("account is not a posting account (level != 3)")
+	ErrInvalidMonth   = errors.New("invalid month format, expected YYYY-MM")
 )
 
 // Service is the PORT (interface) for journal business logic.
@@ -25,8 +26,10 @@ type Service interface {
 	// GetAllScrollView returns paginated journal entries with cursor-based pagination.
 	GetAllScrollView(ctx context.Context, userID int64, filter ListRequest) (*CursorPageResponse, error)
 
-	// GetTotalSummary returns aggregate totals for a user.
-	GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error)
+	// GetTotalSummary returns aggregate totals plus the monthly slice
+	// (net revenue, net expense, monthly count). Month is a full RFC3339
+	// instant; bounds are derived in its own zone. Empty means now.
+	GetTotalSummary(ctx context.Context, userID int64, month string) (*JournalSummary, error)
 
 	// Create creates a new journal entry with balanced lines.
 	Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error)
@@ -34,11 +37,18 @@ type Service interface {
 	// Update updates an existing journal entry.
 	Update(ctx context.Context, userID int64, entryID int64, req UpdateJournalRequest) (*JournalEntryResponse, error)
 
+	// Delete removes a journal entry and reverses its balance effect.
+	Delete(ctx context.Context, userID int64, entryID int64) error
+
 	// CreateBulk creates multiple journal entries from a bulk upload.
 	CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error)
 
 	// GenerateTemplate generates an Excel template with user's posting accounts.
 	GenerateTemplate(ctx context.Context, userID int64) ([]byte, error)
+
+	// ExportExcel generates an Excel export of the user's journals (filterable
+	// like the list view) that can be re-uploaded as-is.
+	ExportExcel(ctx context.Context, userID int64, filter ListRequest) ([]byte, error)
 }
 
 type service struct {
@@ -117,16 +127,37 @@ func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter Lis
 	}, nil
 }
 
-func (s *service) GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error) {
+func (s *service) GetTotalSummary(ctx context.Context, userID int64, month string) (*JournalSummary, error) {
 	log := logger.FromContext(ctx)
 
-	summary, err := s.repo.GetSummaryByUserID(ctx, userID)
+	// The month param is a full RFC3339 instant sent by the client. Month
+	// bounds are derived in the instant's own zone (the client timezone
+	// travels inside the ISO offset), so each user gets their own calendar
+	// month regardless of where the server runs or what UTC says.
+	if month == "" {
+		month = time.Now().Format(time.RFC3339)
+	}
+	now, err := time.Parse(time.RFC3339, month)
 	if err != nil {
-		log.Error("journal GetTotalSummary: failed to get summary", "user_id", userID, "error", err)
+		log.Warn("journal GetTotalSummary: invalid month", "user_id", userID, "month", month)
+		return nil, ErrInvalidMonth
+	}
+	loc := now.Location()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
+
+	monthly, err := s.repo.GetMonthlySummaryByUserID(ctx, userID, start, end)
+	if err != nil {
+		log.Error("journal GetTotalSummary: failed to get summary", "user_id", userID, "month", month, "error", err)
 		return nil, err
 	}
 
-	return summary, nil
+	return &JournalSummary{
+		Month:            start.Format("2006-01"),
+		Income:           monthly.Income,
+		Expense:          monthly.Expense,
+		TransactionCount: monthly.TransactionCount,
+	}, nil
 }
 
 func (s *service) Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error) {
@@ -220,7 +251,14 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 			return err
 		}
 
-		return nil
+		// Audit log
+		newValues := JSONB{"date": date.Format(time.RFC3339), "description": req.Description, "lines": LinesSnapshot(lines)}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entry.ID,
+			Action:         string(JournalActionCreated),
+			NewValues:      &newValues,
+		})
 	})
 
 	if err != nil {
@@ -344,6 +382,9 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		merged[id] += d
 	}
 
+	// Snapshot before mutation for the audit log.
+	oldValues := JSONB{"date": existing.Date.Format(time.RFC3339), "description": existing.Description, "lines": LinesSnapshot(existing.Lines)}
+
 	// Use transaction to ensure atomicity of update operations
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		existing.Date = date
@@ -361,7 +402,15 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 			return err
 		}
 
-		return nil
+		// Audit log
+		newValues := JSONB{"date": date.Format(time.RFC3339), "description": req.Description, "lines": LinesSnapshot(lines)}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entryID,
+			Action:         string(JournalActionUpdated),
+			OldValues:      &oldValues,
+			NewValues:      &newValues,
+		})
 	})
 
 	if err != nil {
@@ -379,6 +428,72 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 	log.Info("journal updated", "user_id", userID, "entry_id", entryID, "line_count", len(req.Lines))
 	resp := toEntryResponse(updated)
 	return &resp, nil
+}
+
+func (s *service) Delete(ctx context.Context, userID int64, entryID int64) error {
+	log := logger.FromContext(ctx)
+
+	existing, err := s.repo.FindEntryByID(ctx, entryID)
+	if err != nil {
+		log.Error("journal delete: failed to find entry", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+	if existing == nil {
+		log.Warn("journal delete: entry not found", "user_id", userID, "entry_id", entryID)
+		return ErrNotFound
+	}
+	if existing.UserID != userID {
+		log.Warn("journal delete: entry not owned by user", "user_id", userID, "entry_id", entryID)
+		return ErrNotFound
+	}
+
+	// Reverse the entry's balance effect: negate its signed deltas.
+	lookupIDs := make([]int64, 0, len(existing.Lines))
+	for _, l := range existing.Lines {
+		lookupIDs = append(lookupIDs, l.AccountID)
+	}
+	accounts, err := s.accountRepo.FindByIDs(ctx, lookupIDs)
+	if err != nil {
+		log.Error("journal delete: failed to find accounts", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+	reversal := buildBalanceDeltas(existing.Lines, accounts)
+	for id, d := range reversal {
+		reversal[id] = -d
+	}
+
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		// Audit log before delete (mirrors the account module pattern).
+		oldValues := JSONB{"date": existing.Date.Format(time.RFC3339), "description": existing.Description, "lines": LinesSnapshot(existing.Lines)}
+		if err := s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entryID,
+			Action:         string(JournalActionDeleted),
+			OldValues:      &oldValues,
+		}); err != nil {
+			return err
+		}
+
+		if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
+			return err
+		}
+
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the delete back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, reversal); err != nil {
+			log.Error("journal delete: failed to apply balance delta", "user_id", userID, "entry_id", entryID, "error", err)
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Error("journal delete: failed to delete entry", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+
+	log.Info("journal deleted", "user_id", userID, "entry_id", entryID)
+	return nil
 }
 
 func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error) {
@@ -552,7 +667,17 @@ func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJo
 			return err
 		}
 
-		return nil
+		// Single audit row for the whole upload (one user action).
+		entryIDs := make([]int64, 0, len(entries))
+		for i := range entries {
+			entryIDs = append(entryIDs, entries[i].ID)
+		}
+		newValues := JSONB{"count": len(entries), "entry_ids": entryIDs}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:    userID,
+			Action:    string(JournalActionBulkCreated),
+			NewValues: &newValues,
+		})
 	})
 
 	if err != nil {
@@ -594,6 +719,55 @@ func (s *service) GenerateTemplate(ctx context.Context, userID int64) ([]byte, e
 
 	log.Info("journal template generated", "user_id", userID, "account_count", len(accounts))
 	return template, nil
+}
+
+func (s *service) ExportExcel(ctx context.Context, userID int64, filter ListRequest) ([]byte, error) {
+	log := logger.FromContext(ctx)
+
+	// Same filter semantics as the list view (cursor/limit don't apply).
+	entryFilter := EntryFilter{
+		AccountIDs: filter.AccountIDs,
+	}
+	if filter.StartDate != "" {
+		if t, err := time.Parse(time.RFC3339, filter.StartDate); err == nil {
+			entryFilter.StartDate = &t
+		}
+	}
+	if filter.EndDate != "" {
+		if t, err := time.Parse(time.RFC3339, filter.EndDate); err == nil {
+			entryFilter.EndDate = &t
+		}
+	}
+
+	rows, err := s.repo.FindExportRows(ctx, userID, entryFilter)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to fetch export rows", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	accounts, err := s.accountRepo.FindPostingByUserID(ctx, userID)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to fetch posting accounts", "user_id", userID, "error", err)
+		return nil, err
+	}
+	accountInfos := make([]AccountInfo, len(accounts))
+	for i, acc := range accounts {
+		accountInfos[i] = AccountInfo{
+			Code:  acc.Code,
+			Name:  acc.Name,
+			Type:  string(acc.Type),
+			Level: acc.Level,
+		}
+	}
+
+	export, err := GenerateExport(rows, accountInfos)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to generate export", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	log.Info("journal export generated", "user_id", userID, "row_count", len(rows))
+	return export, nil
 }
 
 // balanceSignFactor mirrors recalculate_account_balance in SQL: balance is stored

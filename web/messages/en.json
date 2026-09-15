@@ -15,8 +15,17 @@
 		"summaryCredit": {
 			"label": "Total Credit"
 		},
+		"summaryIncome": {
+			"label": "Income",
+			"sub": "This month"
+		},
+		"summaryExpense": {
+			"label": "Expense",
+			"sub": "This month"
+		},
 		"summarytransaction": {
-			"label": "Transactions"
+			"label": "Transactions",
+			"sub": "This month"
 		},
 		"transactionFilterChips": {
 			"all": "All",
@@ -49,7 +58,15 @@
 				"basic": "Basic",
 				"advanced": "Advanced",
 				"upload": "Upload"
-			}
+			},
+			"delete": "Delete Transaction",
+			"deleteConfirmTitle": "Delete this transaction?",
+			"deleteConfirmDesc": "This action cannot be undone.",
+			"deleteCancel": "Cancel",
+			"deleteConfirm": "Yes, Delete",
+			"toastDeleting": "Deleting transaction...",
+			"toastDeleteSuccess": "Transaction deleted successfully",
+			"toastDeleteError": "Failed to delete transaction"
 		},
 		"basic": {
 			"date": "Date",

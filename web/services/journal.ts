@@ -47,26 +47,32 @@ export const journalService = {
 		return res.data.data;
 	},
 
-	getTotalSummary: async (): Promise<{
-		totalDebit: number;
-		totalCredit: number;
+	getTotalSummary: async (month?: string): Promise<{
+		month: string;
+		income: number;
+		expense: number;
 		transactionCount: number;
 	}> => {
 		const client = authHttpClient();
 
-		logger.debug("Fetching journal summary");
+		// encodeURIComponent: ISO instants contain + and : which break raw query strings.
+		const query = month ? `?month=${encodeURIComponent(month)}` : "";
+
+		logger.debug("Fetching journal summary", { month });
 
 		const res = await client.get<
 			ApiResponse<{
-				totalDebit: number;
-				totalCredit: number;
+				month: string;
+				income: number;
+				expense: number;
 				transactionCount: number;
 			}>
-		>(`${API_BASE}/journals/summary`);
+		>(`${API_BASE}/journals/summary${query}`);
 
 		logger.info("Journal summary fetched", {
-			totalDebit: res.data.data.totalDebit,
-			totalCredit: res.data.data.totalCredit,
+			month: res.data.data.month,
+			income: res.data.data.income,
+			expense: res.data.data.expense,
 			transactionCount: res.data.data.transactionCount,
 		});
 
@@ -108,6 +114,18 @@ export const journalService = {
 		return res.data.data;
 	},
 
+	delete: async (id: number): Promise<void> => {
+		const client = authHttpClient();
+
+		logger.debug("Deleting journal entry", { id });
+
+		await client.delete<ApiResponse<{ id: number }>>(
+			`${API_BASE}/journals/${id}`,
+		);
+
+		logger.info("Journal entry deleted", { id });
+	},
+
 	createBulk: async (
 		entries: CreateJournalDto[],
 	): Promise<{ count: number }> => {
@@ -146,6 +164,37 @@ export const journalService = {
 		logger.info("File uploaded", { count: res.data.data.count });
 
 		return res.data.data;
+	},
+
+	downloadTransactions: async (request?: {
+		startDate?: Date;
+		endDate?: Date;
+		accountIds?: string[];
+	}): Promise<Blob> => {
+		const client = authHttpClient();
+
+		const params = new URLSearchParams();
+		if (request?.startDate)
+			params.set("startDate", request.startDate.toISOString());
+		if (request?.endDate) params.set("endDate", request.endDate.toISOString());
+		if (request?.accountIds && request.accountIds.length > 0) {
+			params.set("accountIds", request.accountIds.join(","));
+		}
+		const query = params.toString() ? `?${params}` : "";
+
+		logger.debug("Downloading journal export", {
+			hasStartDate: !!request?.startDate,
+			hasEndDate: !!request?.endDate,
+			accountCount: request?.accountIds?.length ?? 0,
+		});
+
+		const res = await client.get(`${API_BASE}/journals/export${query}`, {
+			responseType: "blob",
+		});
+
+		logger.info("Journal export downloaded");
+
+		return res.data as Blob;
 	},
 
 	downloadTemplate: async (): Promise<Blob> => {

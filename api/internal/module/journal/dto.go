@@ -60,10 +60,21 @@ type AccountInfoResponse struct {
 	ParentID *int64 `json:"parentId"`
 }
 
-// JournalSummary is the summary response for journals.
+// JournalSummary is the summary response for journals: net revenue, net
+// expense, and transaction count for the requested month.
 type JournalSummary struct {
-	TotalDebit       float64 `json:"totalDebit"`
-	TotalCredit      float64 `json:"totalCredit"`
+	Month            string  `json:"month"`
+	Income           float64 `json:"income"`
+	Expense          float64 `json:"expense"`
+	TransactionCount int64   `json:"transactionCount"`
+}
+
+// MonthlySummary is the per-month summary response: net revenue, net expense,
+// and transaction count within the requested month (YYYY-MM).
+type MonthlySummary struct {
+	Month            string  `json:"month"`
+	Income           float64 `json:"income"`
+	Expense          float64 `json:"expense"`
 	TransactionCount int64   `json:"transactionCount"`
 }
 

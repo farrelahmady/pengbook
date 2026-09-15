@@ -1,78 +1,54 @@
 "use client";
 import { JournalScrollView } from "@/components/journal/journal-scroll-view";
 import { useTranslations } from "next-intl";
-import { useCallback, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, X } from "lucide-react";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
+import { accountService } from "@/services/account";
+import { queryKeys } from "@/lib/query-keys";
 
 const QUICK_FILTERS = ["all", "today", "week", "month"] as const;
 
-export default function JournalList() {
+interface JournalListProps {
+	activeQuickFilter: string;
+	dateFrom: string;
+	dateTo: string;
+	selectedAccountIds: string[];
+	startDate?: Date;
+	endDate?: Date;
+	onQuickFilterChange: (f: string) => void;
+	onDateFromChange: (v: string) => void;
+	onDateToChange: (v: string) => void;
+	onToggleAccount: (accountId: string) => void;
+	onClearAllFilters: () => void;
+}
+
+export default function JournalList({
+	activeQuickFilter,
+	dateFrom,
+	dateTo,
+	selectedAccountIds,
+	startDate,
+	endDate,
+	onQuickFilterChange,
+	onDateFromChange,
+	onDateToChange,
+	onToggleAccount,
+	onClearAllFilters,
+}: JournalListProps) {
 	const t = useTranslations("journalPage");
-	const [activeQuickFilter, setActiveQuickFilter] = useState<string>("all");
-	const [dateFrom, setDateFrom] = useState("");
-	const [dateTo, setDateTo] = useState("");
-	const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 	const [showDatePicker, setShowDatePicker] = useState(false);
 	const [showCoaPicker, setShowCoaPicker] = useState(false);
 
+	const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery(
+		{
+			queryKey: queryKeys.accounts.posting,
+			queryFn: () => accountService.getPostingAccounts(),
+		},
+	);
+
 	const hasCustomDate = dateFrom || dateTo;
 	const hasCoaFilter = selectedAccountIds.length > 0;
-
-	const getDateRange = useCallback(() => {
-		if (hasCustomDate) {
-			return {
-				startDate: dateFrom ? new Date(dateFrom) : undefined,
-				endDate: dateTo ? new Date(dateTo + "T23:59:59.999") : undefined,
-			};
-		}
-
-		const today = new Date();
-		const endOfToday = new Date(
-			today.getFullYear(),
-			today.getMonth(),
-			today.getDate(),
-			23,
-			59,
-			59,
-			999,
-		);
-
-		switch (activeQuickFilter) {
-			case "all":
-				return { startDate: undefined, endDate: undefined };
-			case "today":
-				return { startDate: today, endDate: endOfToday };
-			case "week": {
-				const firstDay = new Date(today);
-				firstDay.setDate(today.getDate() - today.getDay());
-				return { startDate: firstDay, endDate: endOfToday };
-			}
-			case "month": {
-				const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-				return { startDate: firstDay, endDate: endOfToday };
-			}
-			default:
-				return { startDate: undefined, endDate: undefined };
-		}
-	}, [activeQuickFilter, hasCustomDate, dateFrom, dateTo]);
-
-	const { startDate, endDate } = getDateRange();
-
-	function toggleAccount(accountId: string) {
-		setSelectedAccountIds((prev) =>
-			prev.includes(accountId)
-				? prev.filter((id) => id !== accountId)
-				: [...prev, accountId],
-		);
-	}
-
-	function clearAllFilters() {
-		setDateFrom("");
-		setDateTo("");
-		setSelectedAccountIds([]);
-		setActiveQuickFilter("today");
-	}
 
 	const hasActiveFilters = hasCustomDate || hasCoaFilter;
 
@@ -83,11 +59,7 @@ export default function JournalList() {
 				{QUICK_FILTERS.map((f) => (
 					<button
 						key={f}
-						onClick={() => {
-							setActiveQuickFilter(f);
-							setDateFrom("");
-							setDateTo("");
-						}}
+						onClick={() => onQuickFilterChange(f)}
 						className={[
 							"shrink-0 px-4 py-1.5 rounded-full text-[12px] font-semibold border transition-all no-tap",
 							activeQuickFilter === f && !hasCustomDate
@@ -140,7 +112,7 @@ export default function JournalList() {
 				{/* Clear filters */}
 				{hasActiveFilters && (
 					<button
-						onClick={clearAllFilters}
+						onClick={onClearAllFilters}
 						className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-semibold
                        border border-danger-200 text-danger-500 bg-danger-50 hover:bg-danger-100 transition-all no-tap"
 					>
@@ -165,10 +137,7 @@ export default function JournalList() {
 								<input
 									type="date"
 									value={dateFrom}
-									onChange={(e) => {
-										setDateFrom(e.target.value);
-										setActiveQuickFilter("");
-									}}
+									onChange={(e) => onDateFromChange(e.target.value)}
 									className="w-full bg-secondary-50 border border-secondary-200 rounded-lg px-3 py-2 text-[12px] text-secondary-700 outline-none focus:border-primary-400"
 								/>
 							</div>
@@ -179,10 +148,7 @@ export default function JournalList() {
 								<input
 									type="date"
 									value={dateTo}
-									onChange={(e) => {
-										setDateTo(e.target.value);
-										setActiveQuickFilter("");
-									}}
+									onChange={(e) => onDateToChange(e.target.value)}
 									className="w-full bg-secondary-50 border border-secondary-200 rounded-lg px-3 py-2 text-[12px] text-secondary-700 outline-none focus:border-primary-400"
 								/>
 							</div>
@@ -192,66 +158,73 @@ export default function JournalList() {
 			)}
 
 			{/* ── COA multi-select ── */}
-			{/* {showCoaPicker && (
+			{showCoaPicker && (
 				<div className="px-4 pb-3">
 					<div className="card-default shadow-card p-3 max-h-60 overflow-y-auto">
 						<p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 mb-2">
 							{t("filter.selectAccount")}
 						</p>
-						<div className="flex flex-col gap-1">
-							{POSTING_ACCOUNTS.map((account) => {
-								const isSelected = selectedAccountIds.includes(account.id);
-								return (
-									<button
-										key={account.id}
-										onClick={() => toggleAccount(account.id)}
-										className={[
-											"flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
-											isSelected
-												? "bg-primary-50 border border-primary-200"
-												: "hover:bg-secondary-50 border border-transparent",
-										].join(" ")}
-									>
-										<div
+						{isLoadingAccounts ? (
+							<p className="text-[12px] text-secondary-400 px-3 py-2">
+								Loading...
+							</p>
+						) : (
+							<div className="flex flex-col gap-1">
+								{postingAccounts.map((account) => {
+									const id = account.id.toString();
+									const isSelected = selectedAccountIds.includes(id);
+									return (
+										<button
+											key={account.id}
+											onClick={() => onToggleAccount(id)}
 											className={[
-												"w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+												"flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
 												isSelected
-													? "bg-primary-500 border-primary-500"
-													: "border-secondary-300",
+													? "bg-primary-50 border border-primary-200"
+													: "hover:bg-secondary-50 border border-transparent",
 											].join(" ")}
 										>
-											{isSelected && (
-												<svg
-													width="10"
-													height="8"
-													viewBox="0 0 10 8"
-													fill="none"
-												>
-													<path
-														d="M1 4L3.5 6.5L9 1"
-														stroke="white"
-														strokeWidth="2"
-														strokeLinecap="round"
-														strokeLinejoin="round"
-													/>
-												</svg>
-											)}
-										</div>
-										<div className="flex-1 min-w-0">
-											<p className="text-[12px] font-medium text-secondary-700 truncate">
-												{account.name}
-											</p>
-											<p className="font-mono text-[10px] text-secondary-400">
-												{account.code}
-											</p>
-										</div>
-									</button>
-								);
-							})}
-						</div>
+											<div
+												className={[
+													"w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+													isSelected
+														? "bg-primary-500 border-primary-500"
+														: "border-secondary-300",
+												].join(" ")}
+											>
+												{isSelected && (
+													<svg
+														width="10"
+														height="8"
+														viewBox="0 0 10 8"
+														fill="none"
+													>
+														<path
+															d="M1 4L3.5 6.5L9 1"
+															stroke="white"
+															strokeWidth="2"
+															strokeLinecap="round"
+															strokeLinejoin="round"
+														/>
+													</svg>
+												)}
+											</div>
+											<div className="flex-1 min-w-0">
+												<p className="text-[12px] font-medium text-secondary-700 truncate">
+													{account.name}
+												</p>
+												<p className="font-mono text-[10px] text-secondary-400">
+													{account.code}
+												</p>
+											</div>
+										</button>
+									);
+								})}
+							</div>
+						)}
 					</div>
 				</div>
-			)} */}
+			)}
 
 			{/* ── List ── */}
 			<div className="px-1">
