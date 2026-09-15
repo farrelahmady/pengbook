@@ -18,6 +18,10 @@ type Repository interface {
 	// Returns a map of id -> Account for quick lookup.
 	FindByIDs(ctx context.Context, ids []int64) (map[int64]*Account, error)
 
+	// FindByCodes returns accounts for the given codes in a single query.
+	// Returns a map of code -> Account for quick lookup.
+	FindByCodes(ctx context.Context, codes []string) (map[string]*Account, error)
+
 	// FindByUserID returns all accounts for the given user, ordered by code.
 	FindByUserID(ctx context.Context, userID int64) ([]Account, error)
 

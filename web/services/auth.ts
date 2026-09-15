@@ -6,6 +6,7 @@ import {
 	TokenResponse,
 	LoginRequest,
 	RegisterRequest,
+	RefreshTokenResponse,
 } from "@/types";
 
 const logger = createLogger("auth.service");
@@ -23,7 +24,10 @@ export const authService = {
 	 * No auth required — uses httpClient (singleton).
 	 */
 	register: async (data: RegisterRequest): Promise<TokenResponse> => {
-		logger.debug("Registering new user", { username: data.username, email: data.email });
+		logger.debug("Registering new user", {
+			username: data.username,
+			email: data.email,
+		});
 		const client = httpClient();
 		const res = await client.post<ApiResponse<TokenResponse>>(
 			"/api/v1/auth/register",
@@ -52,10 +56,10 @@ export const authService = {
 	 * Refresh access token using a refresh token.
 	 * No auth required — uses httpClient (singleton).
 	 */
-	refresh: async (refreshToken: string): Promise<TokenResponse> => {
+	refresh: async (refreshToken: string): Promise<RefreshTokenResponse> => {
 		logger.debug("Refreshing access token");
 		const client = httpClient();
-		const res = await client.post<ApiResponse<TokenResponse>>(
+		const res = await client.post<ApiResponse<RefreshTokenResponse>>(
 			"/api/v1/auth/refresh",
 			{ refreshToken },
 		);
@@ -70,10 +74,9 @@ export const authService = {
 	logout: async (refreshToken: string): Promise<void> => {
 		logger.debug("Revoking refresh token");
 		const client = httpClient();
-		await client.post<ApiResponse<{ message: string }>>(
-			"/api/v1/auth/logout",
-			{ refreshToken },
-		);
+		await client.post<ApiResponse<{ message: string }>>("/api/v1/auth/logout", {
+			refreshToken,
+		});
 		logger.info("Refresh token revoked");
 	},
 

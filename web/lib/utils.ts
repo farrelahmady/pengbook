@@ -67,3 +67,50 @@ export function calcJournalTotals(
 export function isAssetAccount(code: string): boolean {
 	return code.startsWith("1");
 }
+
+// ── Date input helpers ─────────────────────────────────────────────
+// <input type="date"> works with local calendar dates ("yyyy-MM-dd"),
+// while the API expects RFC3339 instants. These helpers bridge the gap
+// without timezone off-by-one errors (GMT+7 safe).
+//
+// NOTE: never use `new Date().toISOString().slice(0, 10)` for the default
+// value — toISOString() is UTC, so it shows yesterday after 00:00 local.
+// And never use `new Date("yyyy-MM-dd")` for submit — a date-only string
+// parses as UTC midnight per spec, shifting the instant by the local offset.
+
+/** Today as "yyyy-MM-dd" in the *local* timezone (for <input type="date">). */
+export function todayLocalDate(): string {
+	return formatDate(new Date(), "yyyy-MM-dd");
+}
+
+/**
+ * Convert a "yyyy-MM-dd" date-input value to an RFC3339 string for the API.
+ * Uses local *noon*: the resulting instant stays on the same calendar date
+ * in UTC and in every timezone from UTC-12 to UTC+12. (Local midnight would
+ * shift the UTC date to the previous day, e.g. Sept 16 Jakarta becomes
+ * Sept 15 17:00Z — breaking raw `slice(0, 10)` reads like the edit forms use.)
+ */
+export function dateInputToISO(date: string): string {
+	return new Date(`${date}T12:00:00`).toISOString();
+}
+
+/**
+ * Full ISO-8601 instant like toISOString(), but keeping the *local* offset
+ * (`+07:00`) instead of converting to UTC (`Z`).
+ *
+ * Use this when the server must interpret the date in the *client's* calendar
+ * (e.g. "which month does the user mean?"). toISOString() loses the offset,
+ * so a 1 Oct 00:30 +07:00 instant arrives as 30 Sep 17:30Z and a naive
+ * UTC-based month split would land in the wrong month.
+ */
+export function localISO(date: Date): string {
+	const pad = (n: number) => String(n).padStart(2, "0");
+	const offsetMin = -date.getTimezoneOffset();
+	const sign = offsetMin >= 0 ? "+" : "-";
+	const abs = Math.abs(offsetMin);
+	return (
+		`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+		`T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+		`${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+	);
+}

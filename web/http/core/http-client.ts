@@ -52,7 +52,9 @@ export interface Interceptor {
  */
 export interface HttpClientConfig {
 	/** Request middlewares (existing pattern). */
-	middlewares?: Array<(config: HttpRequestConfig) => Promise<HttpRequestConfig>>;
+	middlewares?: Array<
+		(config: HttpRequestConfig) => Promise<HttpRequestConfig>
+	>;
 	/** Response interceptors (new pattern). */
 	interceptors?: Interceptor[];
 }

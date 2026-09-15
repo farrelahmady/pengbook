@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,32 +37,114 @@ const createEntryQuery = `
 	RETURNING id, created_at, updated_at
 `
 
-const createLineQuery = `
-	INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit)
-	VALUES ($1, $2, $3, $4)
-	RETURNING id, created_at
-`
-
-func (r *journalRepository) CreateEntry(ctx context.Context, entry *journal.JournalEntry) error {
+func (r *journalRepository) createEntryHeader(ctx context.Context, entry *journal.JournalEntry) error {
 	log := logger.FromContext(ctx)
 	err := r.db(ctx).QueryRow(ctx, createEntryQuery,
 		entry.UserID, entry.Date, entry.Description,
 	).Scan(&entry.ID, &entry.CreatedAt, &entry.UpdatedAt)
 	if err != nil {
 		log.Error("repo: failed to create journal entry", "user_id", entry.UserID, "error", err)
+		return err
 	}
-	return err
+	return nil
+}
+
+func (r *journalRepository) CreateEntry(ctx context.Context, entry *journal.JournalEntry) error {
+	log := logger.FromContext(ctx)
+	if err := r.createEntryHeader(ctx, entry); err != nil {
+		return err
+	}
+
+	// Create lines if present
+	if len(entry.Lines) > 0 {
+		if err := r.createLines(ctx, entry.ID, entry.Lines); err != nil {
+			log.Error("repo: failed to create journal entry lines", "entry_id", entry.ID, "error", err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *journalRepository) createLines(ctx context.Context, entryID int64, lines []journal.JournalEntryLine) error {
-	for i := range lines {
-		lines[i].JournalEntryID = entryID
-		err := r.db(ctx).QueryRow(ctx, createLineQuery,
-			entryID, lines[i].AccountID, lines[i].Debit, lines[i].Credit,
-		).Scan(&lines[i].ID, &lines[i].CreatedAt)
-		if err != nil {
+	// Single-entry case of the bulk path: one multi-row INSERT, no RETURNING.
+	// NOTE: line IDs/CreatedAt are left unset. This is harmless: callers
+	// (Create/Update) refetch via FindEntryByID, and no consumer reads
+	// in-memory line IDs. JournalEntryID is still stamped via the shared
+	// backing array in createLinesBulk.
+	return r.createLinesBulk(ctx, []journal.JournalEntry{{ID: entryID, Lines: lines}})
+}
+
+// bulkLinesChunkSize caps rows per multi-row INSERT so the parameter count
+// stays safely below the Postgres limit (65535; 4 params per line).
+const bulkLinesChunkSize = 2000
+
+// createLinesBulk inserts lines of all entries in as few round trips as
+// possible. No RETURNING: line IDs are not used by the bulk flow (which only
+// returns a count), so they are left unset.
+func (r *journalRepository) createLinesBulk(ctx context.Context, entries []journal.JournalEntry) error {
+	type lineRow struct {
+		entryID   int64
+		accountID int64
+		debit     float64
+		credit    float64
+	}
+	rows := make([]lineRow, 0)
+	for i := range entries {
+		for j := range entries[i].Lines {
+			entries[i].Lines[j].JournalEntryID = entries[i].ID
+			rows = append(rows, lineRow{
+				entryID:   entries[i].ID,
+				accountID: entries[i].Lines[j].AccountID,
+				debit:     entries[i].Lines[j].Debit,
+				credit:    entries[i].Lines[j].Credit,
+			})
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+
+	for start := 0; start < len(rows); start += bulkLinesChunkSize {
+		end := start + bulkLinesChunkSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		chunk := rows[start:end]
+
+		valueStrings := make([]string, 0, len(chunk))
+		args := make([]interface{}, 0, len(chunk)*4)
+		for i, row := range chunk {
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d)", i*4+1, i*4+2, i*4+3, i*4+4))
+			args = append(args, row.entryID, row.accountID, row.debit, row.credit)
+		}
+
+		query := fmt.Sprintf(`
+			INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit)
+			VALUES %s
+		`, strings.Join(valueStrings, ","))
+
+		if _, err := r.db(ctx).Exec(ctx, query, args...); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (r *journalRepository) CreateEntries(ctx context.Context, entries []journal.JournalEntry) error {
+	log := logger.FromContext(ctx)
+	// Headers first, one INSERT each: entry IDs are needed for the lines and
+	// the bulk audit row, and multi-row RETURNING does not guarantee order.
+	for i := range entries {
+		if err := r.createEntryHeader(ctx, &entries[i]); err != nil {
+			log.Error("repo: failed to create journal entry in batch", "user_id", entries[i].UserID, "error", err)
+			return err
+		}
+	}
+	// All lines in bulk (no RETURNING: line IDs are unused downstream).
+	if err := r.createLinesBulk(ctx, entries); err != nil {
+		log.Error("repo: failed to create journal entry lines in batch", "error", err)
+		return err
 	}
 	return nil
 }
@@ -270,6 +354,7 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 		SELECT 
 			l.journal_entry_id,
 			l.id,
+			l.account_id,
 			l.debit,
 			l.credit,
 			a.code || ' · ' || a.name AS account_display
@@ -294,7 +379,7 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 	for lineRows.Next() {
 		var entryID int64
 		var line journal.JournalLineItem
-		if err := lineRows.Scan(&entryID, &line.ID, &line.Debit, &line.Credit, &line.AccountDisplay); err != nil {
+		if err := lineRows.Scan(&entryID, &line.ID, &line.AccountID, &line.Debit, &line.Credit, &line.AccountDisplay); err != nil {
 			return nil, err
 		}
 		if idx, ok := entryMap[entryID]; ok {
@@ -306,6 +391,67 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 	}
 
 	return entries, nil
+}
+
+func (r *journalRepository) FindExportRows(ctx context.Context, userID int64, filter journal.EntryFilter) ([]journal.ExportRow, error) {
+	log := logger.FromContext(ctx)
+
+	// Same filters as the scroll-view list (user + date range + accounts),
+	// but no cursor/limit: export covers everything matching the filter.
+	where := []string{"e.user_id = $1"}
+	args := []interface{}{userID}
+	argIdx := 2
+
+	if filter.StartDate != nil {
+		where = append(where, fmt.Sprintf("e.datetime >= $%d", argIdx))
+		args = append(args, *filter.StartDate)
+		argIdx++
+	}
+	if filter.EndDate != nil {
+		where = append(where, fmt.Sprintf("e.datetime <= $%d", argIdx))
+		args = append(args, *filter.EndDate)
+		argIdx++
+	}
+	if len(filter.AccountIDs) > 0 {
+		placeholders := make([]string, len(filter.AccountIDs))
+		for i, id := range filter.AccountIDs {
+			placeholders[i] = fmt.Sprintf("$%d", argIdx)
+			args = append(args, id)
+			argIdx++
+		}
+		// Entry-level match (same as the list view): a matching entry is
+		// exported whole, so the file stays balanced and re-uploadable.
+		where = append(where, fmt.Sprintf(
+			"e.id IN (SELECT journal_entry_id FROM journal_entry_lines WHERE account_id IN (%s))",
+			strings.Join(placeholders, ","),
+		))
+	}
+
+	query := fmt.Sprintf(`
+		SELECT e.datetime, e.description, a.code, l.debit, l.credit
+		FROM journal_entry_lines l
+		JOIN journal_entries e ON e.id = l.journal_entry_id
+		JOIN accounts a ON a.id = l.account_id
+		WHERE %s
+		ORDER BY e.datetime ASC, e.id ASC, l.id ASC
+	`, strings.Join(where, " AND "))
+
+	rows, err := r.db(ctx).Query(ctx, query, args...)
+	if err != nil {
+		log.Error("repo: failed to find export rows", "user_id", userID, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	exportRows := make([]journal.ExportRow, 0)
+	for rows.Next() {
+		var row journal.ExportRow
+		if err := rows.Scan(&row.Datetime, &row.Description, &row.AccountCode, &row.Debit, &row.Credit); err != nil {
+			return nil, err
+		}
+		exportRows = append(exportRows, row)
+	}
+	return exportRows, rows.Err()
 }
 
 const deleteEntryLinesQuery = `DELETE FROM journal_entry_lines WHERE journal_entry_id = $1`
@@ -368,23 +514,24 @@ func (r *journalRepository) CountByUserID(ctx context.Context, userID int64) (in
 	return count, err
 }
 
-const getSummaryByUserIDQuery = `
-	SELECT 
-		COALESCE(SUM(l.debit), 0) AS total_debit,
-		COALESCE(SUM(l.credit), 0) AS total_credit,
-		(SELECT COUNT(*) FROM journal_entries WHERE user_id = $1) AS transaction_count
+const getMonthlySummaryByUserIDQuery = `
+	SELECT
+		COALESCE(SUM(CASE WHEN a.type = 'REVENUE' THEN l.credit - l.debit ELSE 0 END), 0) AS income,
+		COALESCE(SUM(CASE WHEN a.type = 'EXPENSE' THEN l.debit - l.credit ELSE 0 END), 0) AS expense,
+		COUNT(DISTINCT e.id) AS transaction_count
 	FROM journal_entry_lines l
 	JOIN journal_entries e ON e.id = l.journal_entry_id
-	WHERE e.user_id = $1
+	JOIN accounts a ON a.id = l.account_id
+	WHERE e.user_id = $1 AND e.datetime >= $2 AND e.datetime < $3
 `
 
-func (r *journalRepository) GetSummaryByUserID(ctx context.Context, userID int64) (*journal.JournalSummary, error) {
+func (r *journalRepository) GetMonthlySummaryByUserID(ctx context.Context, userID int64, start, end time.Time) (*journal.MonthlySummary, error) {
 	log := logger.FromContext(ctx)
-	var summary journal.JournalSummary
-	err := r.db(ctx).QueryRow(ctx, getSummaryByUserIDQuery, userID).
-		Scan(&summary.TotalDebit, &summary.TotalCredit, &summary.TransactionCount)
+	var summary journal.MonthlySummary
+	err := r.db(ctx).QueryRow(ctx, getMonthlySummaryByUserIDQuery, userID, start, end).
+		Scan(&summary.Income, &summary.Expense, &summary.TransactionCount)
 	if err != nil {
-		log.Error("repo: failed to get journal summary", "user_id", userID, "error", err)
+		log.Error("repo: failed to get monthly summary", "user_id", userID, "error", err)
 		return nil, err
 	}
 	return &summary, nil
@@ -401,6 +548,102 @@ func (r *journalRepository) SumDebitByUserID(ctx context.Context, userID int64) 
 	var sum float64
 	err := r.db(ctx).QueryRow(ctx, sumDebitByUserIDQuery, userID).Scan(&sum)
 	return sum, err
+}
+
+func (r *journalRepository) RecalculateAccountBalance(ctx context.Context, accountIDs []int64, userID int64) error {
+	log := logger.FromContext(ctx)
+
+	var execErr error
+	if len(accountIDs) > 0 {
+		// Recalculate specific accounts
+		_, execErr = r.db(ctx).Exec(ctx, "SELECT * FROM recalculate_account_balance($1, NULL)", accountIDs)
+	} else if userID > 0 {
+		// Recalculate all accounts for a user
+		_, execErr = r.db(ctx).Exec(ctx, "SELECT * FROM recalculate_account_balance(NULL, $1)", []int64{userID})
+	} else {
+		// Recalculate all accounts
+		_, execErr = r.db(ctx).Exec(ctx, "SELECT * FROM recalculate_account_balance(NULL, NULL)")
+	}
+
+	if execErr != nil {
+		log.Error("repo: failed to recalculate account balance", "error", execErr)
+		return execErr
+	}
+
+	return nil
+}
+
+// ApplyBalanceDelta applies pre-signed balance deltas in a single atomic
+// UPSERT statement: balance = balance + delta per account. Zero deltas are
+// skipped. Missing balance rows are created (fixes new posting accounts that
+// never got a row from recalculate, which only UPDATEs existing rows).
+func (r *journalRepository) ApplyBalanceDelta(ctx context.Context, deltas map[int64]float64) error {
+	log := logger.FromContext(ctx)
+
+	type deltaRow struct {
+		id     int64
+		amount float64
+	}
+	rows := make([]deltaRow, 0, len(deltas))
+	for id, d := range deltas {
+		if d == 0 {
+			continue
+		}
+		rows = append(rows, deltaRow{id: id, amount: d})
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+
+	// Build one VALUES tuple per account so pgx encodes plain int64/float64
+	// args (no array-type mapping involved). The single statement keeps the
+	// read-modify-write atomic per row: no concurrent writer can lose updates.
+	valueStrings := make([]string, 0, len(rows))
+	args := make([]interface{}, 0, len(rows)*2)
+	for i, row := range rows {
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d)", i*2+1, i*2+2))
+		args = append(args, row.id, row.amount)
+	}
+
+	query := fmt.Sprintf(`
+		INSERT INTO account_balances (account_id, balance)
+		VALUES %s
+		ON CONFLICT (account_id) DO UPDATE SET
+			balance = account_balances.balance + EXCLUDED.balance,
+			updated_at = NOW()
+	`, strings.Join(valueStrings, ","))
+
+	_, err := r.db(ctx).Exec(ctx, query, args...)
+	if err != nil {
+		log.Error("repo: failed to apply balance delta", "error", err)
+		return err
+	}
+
+	return nil
+}
+
+const journalInsertAuditLogQuery = `
+	INSERT INTO journal_audit_logs (user_id, journal_entry_id, action, old_values, new_values)
+	VALUES ($1, $2, $3, $4, $5)
+	RETURNING id, created_at
+`
+
+func (r *journalRepository) InsertAuditLog(ctx context.Context, logEntry *journal.JournalAuditLog) error {
+	log := logger.FromContext(ctx)
+	var oldValues, newValues []byte
+	if logEntry.OldValues != nil {
+		oldValues, _ = json.Marshal(logEntry.OldValues)
+	}
+	if logEntry.NewValues != nil {
+		newValues, _ = json.Marshal(logEntry.NewValues)
+	}
+	err := r.db(ctx).QueryRow(ctx, journalInsertAuditLogQuery,
+		logEntry.UserID, logEntry.JournalEntryID, logEntry.Action, oldValues, newValues,
+	).Scan(&logEntry.ID, &logEntry.CreatedAt)
+	if err != nil {
+		log.Error("repo: failed to insert journal audit log", "user_id", logEntry.UserID, "entry_id", logEntry.JournalEntryID, "action", logEntry.Action, "error", err)
+	}
+	return err
 }
 
 const sumCreditByUserIDQuery = `

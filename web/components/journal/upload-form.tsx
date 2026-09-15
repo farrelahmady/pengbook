@@ -1,33 +1,35 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Upload, FileText, X, Download } from "lucide-react";
+import { Upload, FileText, X, Download, Info, FileSpreadsheet, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("UploadForm");
 
 interface UploadFormProps {
   onSuccess: () => void;
 }
 
-const CSV_TEMPLATE = `Tanggal,Deskripsi,Kode Akun,Debit,Kredit
-2026-04-21,Pembelian perlengkapan,5.01.01.04,500000,0
-2026-04-21,Pembelian perlengkapan,1.01.02.01,0,500000
-2026-04-20,Pendapatan jasa,1.01.01.02,2000000,0
-2026-04-20,Pendapatan jasa,4.01.01.01,0,2000000`;
-
-function downloadTemplate() {
-  const blob = new Blob([CSV_TEMPLATE], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "template-jurnal.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+async function downloadTemplate() {
+  try {
+    const blob = await journalService.downloadTemplate();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "template-jurnal.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    logger.error("Failed to download template", { error: err });
+    toast.error("Failed to download template");
+  }
 }
 
 export function UploadForm({ onSuccess }: UploadFormProps) {
@@ -58,15 +60,10 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
   }, []);
 
   function validateAndSetFile(f: File) {
-    const validTypes = [
-      "text/csv",
-      "application/vnd.ms-excel",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ];
     const validExtensions = [".csv", ".xlsx", ".xls"];
     const ext = "." + f.name.split(".").pop()?.toLowerCase();
 
-    if (!validTypes.includes(f.type) && !validExtensions.includes(ext)) {
+    if (!validExtensions.includes(ext)) {
       toast.error(t("toastInvalidFormat"));
       return;
     }
@@ -101,12 +98,14 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
     setIsSubmitting(true);
 
     try {
-      const result = await journalService.createBulk(file);
+      // Send file (CSV or Excel) directly to backend - backend will parse it
+      const result = await journalService.uploadFile(file);
       toast.success(`${t("toastSuccess")} (${result.count} jurnal)`, { id: toastId });
       queryClient.invalidateQueries({ queryKey: queryKeys.journals.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.journals.summary });
       onSuccess();
     } catch (err) {
+      logger.error("Failed to upload journals", { error: err });
       toast.error(t("toastError"), { id: toastId });
     } finally {
       setIsSubmitting(false);
@@ -128,15 +127,59 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
         {t("description")}
       </p>
 
-      {/* Download Template */}
-      <button
-        onClick={downloadTemplate}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-secondary-200
-                   text-[13px] font-medium text-secondary-600 hover:bg-secondary-50 transition-colors"
-      >
-        <Download size={16} />
-        {t("downloadTemplate")}
-      </button>
+      {/* Two Options Section */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Option 1: Excel Template */}
+        <div className="flex flex-col gap-2 p-4 rounded-xl border border-primary-200 bg-primary-50">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet size={16} className="text-primary-600" />
+            <span className="text-[13px] font-semibold text-primary-700">{t("optionExcelTitle")}</span>
+          </div>
+          <p className="text-[11px] text-primary-600 leading-relaxed">
+            {t("optionExcelDesc")}
+          </p>
+          <button
+            onClick={downloadTemplate}
+            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg
+                       bg-primary-500 text-white text-[12px] font-medium
+                       hover:bg-primary-600 transition-colors"
+          >
+            <FileDown size={14} />
+            {t("optionExcelButton")}
+          </button>
+        </div>
+
+        {/* Option 2: CSV */}
+        <div className="flex flex-col gap-2 p-4 rounded-xl border border-secondary-200 bg-secondary-50">
+          <div className="flex items-center gap-2">
+            <FileText size={16} className="text-secondary-600" />
+            <span className="text-[13px] font-semibold text-secondary-700">{t("optionCSVTitle")}</span>
+          </div>
+          <p className="text-[11px] text-secondary-600 leading-relaxed">
+            {t("optionCSVDesc")}
+          </p>
+          <div className="text-[10px] text-secondary-500 font-mono bg-white p-2 rounded-lg border border-secondary-200">
+            <p className="font-semibold mb-1">{t("csvFormatTitle")}</p>
+            <p>{t("csvFormatExample1")}</p>
+            <p>{t("csvFormatExample2")}</p>
+            <p>{t("csvFormatExample3")}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Format Rules */}
+      <div className="flex items-start gap-2 p-3 rounded-lg bg-secondary-50 border border-secondary-200">
+        <Info size={14} className="text-secondary-500 mt-0.5 shrink-0" />
+        <div className="text-[11px] text-secondary-600 space-y-1">
+          <p className="font-medium">{t("rulesTitle")}</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li>{t("ruleDateFormat")}</li>
+            <li>{t("ruleAccountCode")}</li>
+            <li>{t("ruleMinLines")}</li>
+            <li>{t("ruleBalanced")}</li>
+          </ul>
+        </div>
+      </div>
 
       {/* Drop zone */}
       <div

@@ -60,3 +60,42 @@ func TotalCredit(lines []JournalEntryLine) float64 {
 func IsBalanced(lines []JournalEntryLine) bool {
 	return TotalDebit(lines) == TotalCredit(lines)
 }
+
+// JSONB is a wrapper for JSONB columns (maps to PostgreSQL JSONB type).
+// Mirrors the account module's type to keep modules independent.
+type JSONB map[string]interface{}
+
+// JournalAuditLog is the domain entity representing a row in `journal_audit_logs`.
+// It records all changes to journal entries (create, update, delete) for audit trail.
+type JournalAuditLog struct {
+	ID             int64     // Primary key
+	UserID         int64     // FK to users.id
+	JournalEntryID *int64    // FK to journal_entries.id (nullable — NULL if entry deleted)
+	Action         string    // Action name: "journal.created", "journal.updated", "journal.deleted", "journal.bulk_created"
+	OldValues      *JSONB    // State before change (nullable)
+	NewValues      *JSONB    // State after change (nullable)
+	CreatedAt      time.Time // Log creation time
+}
+
+// JournalAuditAction represents the possible audit actions for journals.
+type JournalAuditAction string
+
+const (
+	JournalActionCreated     JournalAuditAction = "journal.created"
+	JournalActionUpdated     JournalAuditAction = "journal.updated"
+	JournalActionDeleted     JournalAuditAction = "journal.deleted"
+	JournalActionBulkCreated JournalAuditAction = "journal.bulk_created"
+)
+
+// LinesSnapshot returns a JSON-serializable snapshot of journal lines for audit logs.
+func LinesSnapshot(lines []JournalEntryLine) []map[string]interface{} {
+	snap := make([]map[string]interface{}, len(lines))
+	for i, l := range lines {
+		snap[i] = map[string]interface{}{
+			"account_id": l.AccountID,
+			"debit":      l.Debit,
+			"credit":     l.Credit,
+		}
+	}
+	return snap
+}

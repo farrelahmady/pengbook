@@ -4,14 +4,18 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
-import { JournalEntry } from "@/types";
+import { accountService } from "@/services/account";
+import { JournalEntryListItem } from "@/types";
+import { dateInputToISO } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("EditBasicForm");
 
 interface EditBasicFormProps {
-	journal: JournalEntry;
+	journal: JournalEntryListItem;
 	onSuccess: () => void;
 }
 
@@ -19,17 +23,22 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 	const t = useTranslations("journalPage.basic");
 	const queryClient = useQueryClient();
 
+	const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery({
+		queryKey: queryKeys.accounts.posting,
+		queryFn: () => accountService.getPostingAccounts(),
+	});
+
 	// Parse existing journal lines to get from/to accounts
 	const existingLines = journal.lines;
-	const debitLine = existingLines.find((l) => parseFloat(l.debit) > 0);
-	const creditLine = existingLines.find((l) => parseFloat(l.credit) > 0);
+	const debitLine = existingLines.find((l) => l.debit > 0);
+	const creditLine = existingLines.find((l) => l.credit > 0);
 
-	const [date, setDate] = useState(journal.date.slice(0, 10));
+	const [date, setDate] = useState(journal.datetime.slice(0, 10));
 	const [description, setDesc] = useState(journal.description ?? "");
-	const [fromAccount, setFrom] = useState(creditLine?.accountId ?? "");
-	const [toAccount, setTo] = useState(debitLine?.accountId ?? "");
+	const [fromAccount, setFrom] = useState(creditLine?.accountId?.toString() ?? "");
+	const [toAccount, setTo] = useState(debitLine?.accountId?.toString() ?? "");
 	const [amount, setAmount] = useState(
-		debitLine ? String(parseFloat(debitLine.debit)) : "",
+		debitLine ? String(debitLine.debit) : "",
 	);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,16 +57,16 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 
 		journalService
 			.update(journal.id, {
-				date: new Date(date).toISOString(),
+				date: dateInputToISO(date),
 				description: description || undefined,
 				lines: [
 					{
-						accountId: toAccount,
+						accountId: Number(toAccount),
 						debit: parseFloat(amount),
 						credit: 0,
 					},
 					{
-						accountId: fromAccount,
+						accountId: Number(fromAccount),
 						debit: 0,
 						credit: parseFloat(amount),
 					},
@@ -114,9 +123,10 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 					value={fromAccount}
 					onChange={(e) => setFrom(e.target.value)}
 					className={`${inputClass} appearance-none`}
+					disabled={isLoadingAccounts}
 				>
-					<option value="">{t("fromPlaceholder")}</option>
-					{POSTING_ACCOUNTS.map((a) => (
+					<option value="">{isLoadingAccounts ? "Loading..." : t("fromPlaceholder")}</option>
+					{postingAccounts.map((a) => (
 						<option key={a.id} value={a.id}>
 							{a.code} · {a.name}
 						</option>
@@ -138,9 +148,10 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 					value={toAccount}
 					onChange={(e) => setTo(e.target.value)}
 					className={`${inputClass} appearance-none`}
+					disabled={isLoadingAccounts}
 				>
-					<option value="">{t("toPlaceholder")}</option>
-					{POSTING_ACCOUNTS.map((a) => (
+					<option value="">{isLoadingAccounts ? "Loading..." : t("toPlaceholder")}</option>
+					{postingAccounts.map((a) => (
 						<option key={a.id} value={a.id}>
 							{a.code} · {a.name}
 						</option>

@@ -1,3 +1,4 @@
+import { createLogger } from "@/lib/logger";
 import { HttpRequestConfig } from "../types/http";
 
 /**
@@ -13,6 +14,8 @@ import { HttpRequestConfig } from "../types/http";
  *     authMiddleware(async () => getTokenFromStorage()),
  *   ]);
  */
+const logger = createLogger("authMiddleware");
+
 export function authMiddleware(getToken: () => Promise<string | null>) {
 	return async (config: HttpRequestConfig) => {
 		const token = await getToken();

@@ -11,15 +11,13 @@ const logger = createLogger("journal.service");
 const API_BASE = "/api/v1";
 
 export const journalService = {
-	getAllScrollView: async (
-		request: {
-			limit: number;
-			cursor?: string;
-			startDate?: Date;
-			endDate?: Date;
-			accountIds?: string[];
-		},
-	): Promise<JournalEntryListResponse> => {
+	getAllScrollView: async (request: {
+		limit: number;
+		cursor?: string;
+		startDate?: Date;
+		endDate?: Date;
+		accountIds?: string[];
+	}): Promise<JournalEntryListResponse> => {
 		const client = authHttpClient();
 
 		const params = new URLSearchParams();
@@ -49,35 +47,39 @@ export const journalService = {
 		return res.data.data;
 	},
 
-	getTotalSummary: async (): Promise<{
-		totalDebit: number;
-		totalCredit: number;
+	getTotalSummary: async (month?: string): Promise<{
+		month: string;
+		income: number;
+		expense: number;
 		transactionCount: number;
 	}> => {
 		const client = authHttpClient();
 
-		logger.debug("Fetching journal summary");
+		// encodeURIComponent: ISO instants contain + and : which break raw query strings.
+		const query = month ? `?month=${encodeURIComponent(month)}` : "";
+
+		logger.debug("Fetching journal summary", { month });
 
 		const res = await client.get<
 			ApiResponse<{
-				totalDebit: number;
-				totalCredit: number;
+				month: string;
+				income: number;
+				expense: number;
 				transactionCount: number;
 			}>
-		>(`${API_BASE}/journals/summary`);
+		>(`${API_BASE}/journals/summary${query}`);
 
 		logger.info("Journal summary fetched", {
-			totalDebit: res.data.data.totalDebit,
-			totalCredit: res.data.data.totalCredit,
+			month: res.data.data.month,
+			income: res.data.data.income,
+			expense: res.data.data.expense,
 			transactionCount: res.data.data.transactionCount,
 		});
 
 		return res.data.data;
 	},
 
-	create: async (
-		dto: CreateJournalDto,
-	): Promise<JournalEntryListItem> => {
+	create: async (dto: CreateJournalDto): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
 
 		logger.debug("Creating journal entry");
@@ -95,7 +97,7 @@ export const journalService = {
 	},
 
 	update: async (
-		id: string,
+		id: number,
 		dto: CreateJournalDto,
 	): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
@@ -110,5 +112,102 @@ export const journalService = {
 		logger.info("Journal entry updated", { id });
 
 		return res.data.data;
+	},
+
+	delete: async (id: number): Promise<void> => {
+		const client = authHttpClient();
+
+		logger.debug("Deleting journal entry", { id });
+
+		await client.delete<ApiResponse<{ id: number }>>(
+			`${API_BASE}/journals/${id}`,
+		);
+
+		logger.info("Journal entry deleted", { id });
+	},
+
+	createBulk: async (
+		entries: CreateJournalDto[],
+	): Promise<{ count: number }> => {
+		const client = authHttpClient();
+
+		logger.debug("Creating bulk journal entries", { count: entries.length });
+
+		const res = await client.post<ApiResponse<{ count: number }>>(
+			`${API_BASE}/journals/upload`,
+			{ entries },
+		);
+
+		logger.info("Bulk journal entries created", { count: res.data.data.count });
+
+		return res.data.data;
+	},
+
+	uploadFile: async (file: File): Promise<{ count: number }> => {
+		const client = authHttpClient();
+
+		logger.debug("Uploading file", { filename: file.name, size: file.size });
+
+		const formData = new FormData();
+		formData.append("file", file);
+
+		const res = await client.post<ApiResponse<{ count: number }>>(
+			`${API_BASE}/journals/upload`,
+			formData,
+			{
+				headers: {
+					"Content-Type": "multipart/form-data",
+				},
+			},
+		);
+
+		logger.info("File uploaded", { count: res.data.data.count });
+
+		return res.data.data;
+	},
+
+	downloadTransactions: async (request?: {
+		startDate?: Date;
+		endDate?: Date;
+		accountIds?: string[];
+	}): Promise<Blob> => {
+		const client = authHttpClient();
+
+		const params = new URLSearchParams();
+		if (request?.startDate)
+			params.set("startDate", request.startDate.toISOString());
+		if (request?.endDate) params.set("endDate", request.endDate.toISOString());
+		if (request?.accountIds && request.accountIds.length > 0) {
+			params.set("accountIds", request.accountIds.join(","));
+		}
+		const query = params.toString() ? `?${params}` : "";
+
+		logger.debug("Downloading journal export", {
+			hasStartDate: !!request?.startDate,
+			hasEndDate: !!request?.endDate,
+			accountCount: request?.accountIds?.length ?? 0,
+		});
+
+		const res = await client.get(`${API_BASE}/journals/export${query}`, {
+			responseType: "blob",
+		});
+
+		logger.info("Journal export downloaded");
+
+		return res.data as Blob;
+	},
+
+	downloadTemplate: async (): Promise<Blob> => {
+		const client = authHttpClient();
+
+		logger.debug("Downloading journal template");
+
+		const res = await client.get(`${API_BASE}/journals/template`, {
+			responseType: "blob",
+		});
+
+		logger.info("Journal template downloaded");
+
+		return res.data as Blob;
 	},
 };

@@ -15,8 +15,17 @@
 		"summaryCredit": {
 			"label": "Total Kredit"
 		},
+		"summaryIncome": {
+			"label": "Pemasukan",
+			"sub": "Bulan ini"
+		},
+		"summaryExpense": {
+			"label": "Pengeluaran",
+			"sub": "Bulan ini"
+		},
 		"summarytransaction": {
-			"label": "Transaksi"
+			"label": "Transaksi",
+			"sub": "Bulan ini"
 		},
 		"transactionFilterChips": {
 			"all": "Semua",
@@ -49,7 +58,15 @@
 				"basic": "Basic",
 				"advanced": "Advanced",
 				"upload": "Upload"
-			}
+			},
+			"delete": "Hapus Transaksi",
+			"deleteConfirmTitle": "Hapus transaksi ini?",
+			"deleteConfirmDesc": "Tindakan ini tidak bisa dibatalkan.",
+			"deleteCancel": "Batal",
+			"deleteConfirm": "Ya, Hapus",
+			"toastDeleting": "Menghapus transaksi...",
+			"toastDeleteSuccess": "Transaksi berhasil dihapus",
+			"toastDeleteError": "Gagal menghapus transaksi"
 		},
 		"basic": {
 			"date": "Tanggal",
@@ -98,6 +115,20 @@
 			"selectedFile": "File terpilih:",
 			"remove": "Hapus",
 			"submit": "Upload & Proses",
+			"optionExcelTitle": "Excel (Disarankan)",
+			"optionExcelDesc": "Download template, isi data, lalu upload file Excel yang sudah diisi.",
+			"optionExcelButton": "Download Template",
+			"optionCSVTitle": "CSV Manual",
+			"optionCSVDesc": "Buat file CSV sendiri dengan format yang sudah ditentukan.",
+			"csvFormatTitle": "Format CSV:",
+			"csvFormatExample1": "Tanggal,Deskripsi,Kode Akun,Debit,Kredit",
+			"csvFormatExample2": "2026-04-21,Contoh,1.01.01.01,500000,0",
+			"csvFormatExample3": "2026-04-21,Contoh,4.01.01.01,0,500000",
+			"rulesTitle": "Ketentuan Format:",
+			"ruleDateFormat": "Format tanggal: YYYY-MM-DD",
+			"ruleAccountCode": "Kode akun: 4 segmen (contoh: 1.01.01.01)",
+			"ruleMinLines": "Minimal 2 baris per entri jurnal",
+			"ruleBalanced": "Debit harus sama dengan Kredit",
 			"toastLoading": "Mengupload file...",
 			"toastSuccess": "File berhasil diproses",
 			"toastError": "Gagal memproses file",

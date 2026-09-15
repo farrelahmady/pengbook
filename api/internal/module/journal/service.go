@@ -18,6 +18,7 @@ var (
 	ErrNotBalanced    = errors.New("journal entry lines are not balanced (debit != credit)")
 	ErrInvalidLines   = errors.New("journal entry must have at least 2 lines")
 	ErrNotPostingAccount = errors.New("account is not a posting account (level != 3)")
+	ErrInvalidMonth   = errors.New("invalid month format, expected YYYY-MM")
 )
 
 // Service is the PORT (interface) for journal business logic.
@@ -25,14 +26,29 @@ type Service interface {
 	// GetAllScrollView returns paginated journal entries with cursor-based pagination.
 	GetAllScrollView(ctx context.Context, userID int64, filter ListRequest) (*CursorPageResponse, error)
 
-	// GetTotalSummary returns aggregate totals for a user.
-	GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error)
+	// GetTotalSummary returns aggregate totals plus the monthly slice
+	// (net revenue, net expense, monthly count). Month is a full RFC3339
+	// instant; bounds are derived in its own zone. Empty means now.
+	GetTotalSummary(ctx context.Context, userID int64, month string) (*JournalSummary, error)
 
 	// Create creates a new journal entry with balanced lines.
 	Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error)
 
 	// Update updates an existing journal entry.
 	Update(ctx context.Context, userID int64, entryID int64, req UpdateJournalRequest) (*JournalEntryResponse, error)
+
+	// Delete removes a journal entry and reverses its balance effect.
+	Delete(ctx context.Context, userID int64, entryID int64) error
+
+	// CreateBulk creates multiple journal entries from a bulk upload.
+	CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error)
+
+	// GenerateTemplate generates an Excel template with user's posting accounts.
+	GenerateTemplate(ctx context.Context, userID int64) ([]byte, error)
+
+	// ExportExcel generates an Excel export of the user's journals (filterable
+	// like the list view) that can be re-uploaded as-is.
+	ExportExcel(ctx context.Context, userID int64, filter ListRequest) ([]byte, error)
 }
 
 type service struct {
@@ -111,16 +127,37 @@ func (s *service) GetAllScrollView(ctx context.Context, userID int64, filter Lis
 	}, nil
 }
 
-func (s *service) GetTotalSummary(ctx context.Context, userID int64) (*JournalSummary, error) {
+func (s *service) GetTotalSummary(ctx context.Context, userID int64, month string) (*JournalSummary, error) {
 	log := logger.FromContext(ctx)
 
-	summary, err := s.repo.GetSummaryByUserID(ctx, userID)
+	// The month param is a full RFC3339 instant sent by the client. Month
+	// bounds are derived in the instant's own zone (the client timezone
+	// travels inside the ISO offset), so each user gets their own calendar
+	// month regardless of where the server runs or what UTC says.
+	if month == "" {
+		month = time.Now().Format(time.RFC3339)
+	}
+	now, err := time.Parse(time.RFC3339, month)
 	if err != nil {
-		log.Error("journal GetTotalSummary: failed to get summary", "user_id", userID, "error", err)
+		log.Warn("journal GetTotalSummary: invalid month", "user_id", userID, "month", month)
+		return nil, ErrInvalidMonth
+	}
+	loc := now.Location()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
+
+	monthly, err := s.repo.GetMonthlySummaryByUserID(ctx, userID, start, end)
+	if err != nil {
+		log.Error("journal GetTotalSummary: failed to get summary", "user_id", userID, "month", month, "error", err)
 		return nil, err
 	}
 
-	return summary, nil
+	return &JournalSummary{
+		Month:            start.Format("2006-01"),
+		Income:           monthly.Income,
+		Expense:          monthly.Expense,
+		TransactionCount: monthly.TransactionCount,
+	}, nil
 }
 
 func (s *service) Create(ctx context.Context, userID int64, req CreateJournalRequest) (*JournalEntryResponse, error) {
@@ -187,7 +224,11 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 		}
 	}
 
-	// Use transaction to ensure atomicity of entry + lines creation
+	// Delta update: only touch the accounts in this entry (O(lines)),
+	// instead of re-summing their entire history.
+	deltas := buildBalanceDeltas(lines, accounts)
+
+	// Use transaction to ensure atomicity of entry + lines + balance creation
 	var entryID int64
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		entry := &JournalEntry{
@@ -202,7 +243,22 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 		}
 
 		entryID = entry.ID
-		return nil
+
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the entry back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, deltas); err != nil {
+			log.Error("journal create: failed to apply balance delta", "user_id", userID, "error", err)
+			return err
+		}
+
+		// Audit log
+		newValues := JSONB{"date": date.Format(time.RFC3339), "description": req.Description, "lines": LinesSnapshot(lines)}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entry.ID,
+			Action:         string(JournalActionCreated),
+			NewValues:      &newValues,
+		})
 	})
 
 	if err != nil {
@@ -263,14 +319,27 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		return nil, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
 	}
 
-	// Validate all accounts are posting accounts (batch query)
+	// Validate all accounts are posting accounts (batch query).
+	// Lookup covers old + new accounts: new ones for validation, old ones for
+	// sign factors when reversing their deltas.
 	accountIDs := make([]int64, len(req.Lines))
 	for i, l := range req.Lines {
 		accountIDs[i] = l.AccountID
 	}
-	accounts, err := s.accountRepo.FindByIDs(ctx, accountIDs)
+	lookupSet := make(map[int64]bool, len(accountIDs)+len(existing.Lines))
+	for _, id := range accountIDs {
+		lookupSet[id] = true
+	}
+	for _, l := range existing.Lines {
+		lookupSet[l.AccountID] = true
+	}
+	lookupIDs := make([]int64, 0, len(lookupSet))
+	for id := range lookupSet {
+		lookupIDs = append(lookupIDs, id)
+	}
+	accounts, err := s.accountRepo.FindByIDs(ctx, lookupIDs)
 	if err != nil {
-		log.Error("journal update: failed to find accounts", "user_id", userID, "account_ids", accountIDs, "error", err)
+		log.Error("journal update: failed to find accounts", "user_id", userID, "account_ids", lookupIDs, "error", err)
 		return nil, err
 	}
 
@@ -300,13 +369,48 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		}
 	}
 
+	// Delta update: reverse the old lines, apply the new lines, merged per
+	// account. Covers account changes (A -> B reverses A, applies B) and
+	// amount-only changes with a single atomic UPSERT.
+	oldDeltas := buildBalanceDeltas(existing.Lines, accounts)
+	newDeltas := buildBalanceDeltas(lines, accounts)
+	merged := make(map[int64]float64, len(oldDeltas)+len(newDeltas))
+	for id, d := range oldDeltas {
+		merged[id] -= d
+	}
+	for id, d := range newDeltas {
+		merged[id] += d
+	}
+
+	// Snapshot before mutation for the audit log.
+	oldValues := JSONB{"date": existing.Date.Format(time.RFC3339), "description": existing.Description, "lines": LinesSnapshot(existing.Lines)}
+
 	// Use transaction to ensure atomicity of update operations
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		existing.Date = date
 		existing.Description = req.Description
 		existing.Lines = lines
 
-		return s.repo.UpdateEntry(ctx, existing)
+		if err := s.repo.UpdateEntry(ctx, existing); err != nil {
+			return err
+		}
+
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the entry back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, merged); err != nil {
+			log.Error("journal update: failed to apply balance delta", "user_id", userID, "entry_id", entryID, "error", err)
+			return err
+		}
+
+		// Audit log
+		newValues := JSONB{"date": date.Format(time.RFC3339), "description": req.Description, "lines": LinesSnapshot(lines)}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entryID,
+			Action:         string(JournalActionUpdated),
+			OldValues:      &oldValues,
+			NewValues:      &newValues,
+		})
 	})
 
 	if err != nil {
@@ -324,6 +428,374 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 	log.Info("journal updated", "user_id", userID, "entry_id", entryID, "line_count", len(req.Lines))
 	resp := toEntryResponse(updated)
 	return &resp, nil
+}
+
+func (s *service) Delete(ctx context.Context, userID int64, entryID int64) error {
+	log := logger.FromContext(ctx)
+
+	existing, err := s.repo.FindEntryByID(ctx, entryID)
+	if err != nil {
+		log.Error("journal delete: failed to find entry", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+	if existing == nil {
+		log.Warn("journal delete: entry not found", "user_id", userID, "entry_id", entryID)
+		return ErrNotFound
+	}
+	if existing.UserID != userID {
+		log.Warn("journal delete: entry not owned by user", "user_id", userID, "entry_id", entryID)
+		return ErrNotFound
+	}
+
+	// Reverse the entry's balance effect: negate its signed deltas.
+	lookupIDs := make([]int64, 0, len(existing.Lines))
+	for _, l := range existing.Lines {
+		lookupIDs = append(lookupIDs, l.AccountID)
+	}
+	accounts, err := s.accountRepo.FindByIDs(ctx, lookupIDs)
+	if err != nil {
+		log.Error("journal delete: failed to find accounts", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+	reversal := buildBalanceDeltas(existing.Lines, accounts)
+	for id, d := range reversal {
+		reversal[id] = -d
+	}
+
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		// Audit log before delete (mirrors the account module pattern).
+		oldValues := JSONB{"date": existing.Date.Format(time.RFC3339), "description": existing.Description, "lines": LinesSnapshot(existing.Lines)}
+		if err := s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:         userID,
+			JournalEntryID: &entryID,
+			Action:         string(JournalActionDeleted),
+			OldValues:      &oldValues,
+		}); err != nil {
+			return err
+		}
+
+		if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
+			return err
+		}
+
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the delete back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, reversal); err != nil {
+			log.Error("journal delete: failed to apply balance delta", "user_id", userID, "entry_id", entryID, "error", err)
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Error("journal delete: failed to delete entry", "user_id", userID, "entry_id", entryID, "error", err)
+		return err
+	}
+
+	log.Info("journal deleted", "user_id", userID, "entry_id", entryID)
+	return nil
+}
+
+func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error) {
+	log := logger.FromContext(ctx)
+
+	if len(req.Entries) == 0 {
+		return 0, errors.New("no entries provided")
+	}
+
+	// Collect all account codes from all entries for batch lookup
+	allAccountCodes := make(map[string]bool)
+	for _, entry := range req.Entries {
+		for _, line := range entry.Lines {
+			if line.AccountCode != "" {
+				allAccountCodes[line.AccountCode] = true
+			}
+		}
+	}
+
+	accountCodes := make([]string, 0, len(allAccountCodes))
+	for code := range allAccountCodes {
+		accountCodes = append(accountCodes, code)
+	}
+
+	// Find accounts by codes
+	accountsByCode, err := s.accountRepo.FindByCodes(ctx, accountCodes)
+	if err != nil {
+		log.Error("journal create bulk: failed to find accounts by codes", "user_id", userID, "error", err)
+		return 0, err
+	}
+
+	// Validate all accounts exist, are owned by user, and are posting accounts
+	for code, acc := range accountsByCode {
+		if acc == nil {
+			log.Warn("journal create bulk: account not found by code", "user_id", userID, "account_code", code)
+			return 0, errors.New("account not found: " + code)
+		}
+		if acc.UserID != userID {
+			log.Warn("journal create bulk: account not owned by user", "user_id", userID, "account_code", code)
+			return 0, errors.New("account not found: " + code)
+		}
+		if !acc.CanPost() {
+			log.Warn("journal create bulk: not a posting account", "user_id", userID, "account_code", code, "level", acc.Level)
+			return 0, ErrNotPostingAccount
+		}
+	}
+
+	// Build all entries with resolved account IDs
+	entries := make([]JournalEntry, 0, len(req.Entries))
+	allAccountIDs := make(map[int64]bool)
+	for _, entryReq := range req.Entries {
+		// Validate lines
+		if len(entryReq.Lines) < 2 {
+			log.Warn("journal create bulk: invalid lines", "user_id", userID, "line_count", len(entryReq.Lines))
+			return 0, ErrInvalidLines
+		}
+
+		// Validate balanced
+		totalDebit, totalCredit := 0.0, 0.0
+		for _, l := range entryReq.Lines {
+			totalDebit += l.Debit
+			totalCredit += l.Credit
+		}
+		if totalDebit != totalCredit {
+			log.Warn("journal create bulk: not balanced", "user_id", userID, "debit", totalDebit, "credit", totalCredit)
+			return 0, ErrNotBalanced
+		}
+
+		// Parse date
+		date, err := time.Parse(time.RFC3339, entryReq.Date)
+		if err != nil {
+			log.Warn("journal create bulk: invalid date", "user_id", userID, "date", entryReq.Date)
+			return 0, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
+		}
+
+		// Build lines with resolved account IDs
+		lines := make([]JournalEntryLine, len(entryReq.Lines))
+		for i, l := range entryReq.Lines {
+			var accountID int64
+			if l.AccountID > 0 {
+				accountID = l.AccountID
+			} else if l.AccountCode != "" {
+				if acc, ok := accountsByCode[l.AccountCode]; ok && acc != nil {
+					accountID = acc.ID
+				} else {
+					return 0, errors.New("account not found: " + l.AccountCode)
+				}
+			} else {
+				return 0, errors.New("account id or account code is required")
+			}
+			allAccountIDs[accountID] = true
+			lines[i] = JournalEntryLine{
+				AccountID: accountID,
+				Debit:     l.Debit,
+				Credit:    l.Credit,
+			}
+		}
+
+		entries = append(entries, JournalEntry{
+			UserID:      userID,
+			Date:        date,
+			Description: entryReq.Description,
+			Lines:       lines,
+		})
+	}
+
+	// Resolve account types for every touched account. Codes are already in
+	// accountsByCode; IDs passed directly are fetched so ownership and posting
+	// level get the same validation as single create (previously unchecked).
+	accountsByID := make(map[int64]*account.Account, len(allAccountIDs))
+	for _, acc := range accountsByCode {
+		if acc != nil {
+			accountsByID[acc.ID] = acc
+		}
+	}
+	missing := make([]int64, 0)
+	for id := range allAccountIDs {
+		if _, ok := accountsByID[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		fetched, err := s.accountRepo.FindByIDs(ctx, missing)
+		if err != nil {
+			log.Error("journal create bulk: failed to find accounts by ids", "user_id", userID, "error", err)
+			return 0, err
+		}
+		for id, acc := range fetched {
+			accountsByID[id] = acc
+		}
+	}
+	for id := range allAccountIDs {
+		acc := accountsByID[id]
+		if acc == nil {
+			log.Warn("journal create bulk: account not found by id", "user_id", userID, "account_id", id)
+			return 0, errors.New("account not found")
+		}
+		if acc.UserID != userID {
+			log.Warn("journal create bulk: account not owned by user", "user_id", userID, "account_id", id)
+			return 0, errors.New("account not found")
+		}
+		if !acc.CanPost() {
+			log.Warn("journal create bulk: not a posting account", "user_id", userID, "account_id", id, "level", acc.Level)
+			return 0, ErrNotPostingAccount
+		}
+	}
+
+	// Aggregate signed deltas across all entries: one atomic UPSERT instead of
+	// re-summing each account's entire history.
+	bulkDeltas := make(map[int64]float64, len(allAccountIDs))
+	for _, e := range entries {
+		for _, l := range e.Lines {
+			acc := accountsByID[l.AccountID]
+			if acc == nil {
+				continue
+			}
+			bulkDeltas[l.AccountID] += (l.Debit - l.Credit) * balanceSignFactor(acc.Type)
+		}
+	}
+
+	// Use transaction to ensure atomicity
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		if err := s.repo.CreateEntries(ctx, entries); err != nil {
+			return err
+		}
+
+		// Balance is part of the write path now (not best-effort healing),
+		// so a failure rolls the entries back instead of drifting silently.
+		if err := s.repo.ApplyBalanceDelta(ctx, bulkDeltas); err != nil {
+			log.Error("journal create bulk: failed to apply balance delta", "user_id", userID, "error", err)
+			return err
+		}
+
+		// Single audit row for the whole upload (one user action).
+		entryIDs := make([]int64, 0, len(entries))
+		for i := range entries {
+			entryIDs = append(entryIDs, entries[i].ID)
+		}
+		newValues := JSONB{"count": len(entries), "entry_ids": entryIDs}
+		return s.repo.InsertAuditLog(ctx, &JournalAuditLog{
+			UserID:    userID,
+			Action:    string(JournalActionBulkCreated),
+			NewValues: &newValues,
+		})
+	})
+
+	if err != nil {
+		log.Error("journal create bulk: failed to create entries", "user_id", userID, "error", err)
+		return 0, err
+	}
+
+	log.Info("journal entries created in bulk", "user_id", userID, "count", len(entries))
+	return int64(len(entries)), nil
+}
+
+func (s *service) GenerateTemplate(ctx context.Context, userID int64) ([]byte, error) {
+	log := logger.FromContext(ctx)
+
+	// Fetch user's posting accounts
+	accounts, err := s.accountRepo.FindPostingByUserID(ctx, userID)
+	if err != nil {
+		log.Error("journal GenerateTemplate: failed to fetch posting accounts", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	// Convert to AccountInfo for template generation
+	accountInfos := make([]AccountInfo, len(accounts))
+	for i, acc := range accounts {
+		accountInfos[i] = AccountInfo{
+			Code:  acc.Code,
+			Name:  acc.Name,
+			Type:  string(acc.Type),
+			Level: acc.Level,
+		}
+	}
+
+	// Generate Excel template
+	template, err := GenerateTemplateWithAccounts(accountInfos)
+	if err != nil {
+		log.Error("journal GenerateTemplate: failed to generate template", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	log.Info("journal template generated", "user_id", userID, "account_count", len(accounts))
+	return template, nil
+}
+
+func (s *service) ExportExcel(ctx context.Context, userID int64, filter ListRequest) ([]byte, error) {
+	log := logger.FromContext(ctx)
+
+	// Same filter semantics as the list view (cursor/limit don't apply).
+	entryFilter := EntryFilter{
+		AccountIDs: filter.AccountIDs,
+	}
+	if filter.StartDate != "" {
+		if t, err := time.Parse(time.RFC3339, filter.StartDate); err == nil {
+			entryFilter.StartDate = &t
+		}
+	}
+	if filter.EndDate != "" {
+		if t, err := time.Parse(time.RFC3339, filter.EndDate); err == nil {
+			entryFilter.EndDate = &t
+		}
+	}
+
+	rows, err := s.repo.FindExportRows(ctx, userID, entryFilter)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to fetch export rows", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	accounts, err := s.accountRepo.FindPostingByUserID(ctx, userID)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to fetch posting accounts", "user_id", userID, "error", err)
+		return nil, err
+	}
+	accountInfos := make([]AccountInfo, len(accounts))
+	for i, acc := range accounts {
+		accountInfos[i] = AccountInfo{
+			Code:  acc.Code,
+			Name:  acc.Name,
+			Type:  string(acc.Type),
+			Level: acc.Level,
+		}
+	}
+
+	export, err := GenerateExport(rows, accountInfos)
+	if err != nil {
+		log.Error("journal ExportExcel: failed to generate export", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	log.Info("journal export generated", "user_id", userID, "row_count", len(rows))
+	return export, nil
+}
+
+// balanceSignFactor mirrors recalculate_account_balance in SQL: balance is stored
+// as (debit - credit) * sign, where revenue/liability/equity carry a negative
+// sign so a normal credit balance reads positive.
+func balanceSignFactor(t account.AccountType) float64 {
+	switch t {
+	case account.AccountTypeLiability, account.AccountTypeEquity, account.AccountTypeRevenue:
+		return -1
+	default: // ASSET, EXPENSE, OTHER
+		return 1
+	}
+}
+
+// buildBalanceDeltas aggregates signed deltas per account for the given lines.
+// Signed delta per line = (debit - credit) * signFactor(account type).
+// Lines whose account info is missing are skipped defensively (callers validate
+// beforehand, so this only guards against stale references).
+func buildBalanceDeltas(lines []JournalEntryLine, accounts map[int64]*account.Account) map[int64]float64 {
+	deltas := make(map[int64]float64, len(lines))
+	for _, l := range lines {
+		acc := accounts[l.AccountID]
+		if acc == nil {
+			continue
+		}
+		deltas[l.AccountID] += (l.Debit - l.Credit) * balanceSignFactor(acc.Type)
+	}
+	return deltas
 }
 
 func toEntryResponse(e *JournalEntry) JournalEntryResponse {

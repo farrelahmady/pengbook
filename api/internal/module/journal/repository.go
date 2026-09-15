@@ -12,6 +12,9 @@ type Repository interface {
 	// CreateEntry creates a new journal entry with its lines in a transaction.
 	CreateEntry(ctx context.Context, entry *JournalEntry) error
 
+	// CreateEntries creates multiple journal entries with their lines in a batch.
+	CreateEntries(ctx context.Context, entries []JournalEntry) error
+
 	// FindEntryByID returns a journal entry by id, including its lines.
 	FindEntryByID(ctx context.Context, id int64) (*JournalEntry, error)
 
@@ -27,8 +30,10 @@ type Repository interface {
 	// DeleteEntry deletes a journal entry and its lines.
 	DeleteEntry(ctx context.Context, id int64) error
 
-	// GetSummaryByUserID returns aggregated summary (total debit, total credit, count) in a single query.
-	GetSummaryByUserID(ctx context.Context, userID int64) (*JournalSummary, error)
+	// GetMonthlySummaryByUserID returns net revenue, net expense, and entry
+	// count within [start, end). Income = SUM(credit-debit) over REVENUE
+	// lines, expense = SUM(debit-credit) over EXPENSE lines.
+	GetMonthlySummaryByUserID(ctx context.Context, userID int64, start, end time.Time) (*MonthlySummary, error)
 
 	// CountByUserID returns the total count of journal entries for a user.
 	CountByUserID(ctx context.Context, userID int64) (int64, error)
@@ -47,6 +52,36 @@ type Repository interface {
 
 	// SumCreditByUserIDWithFilter returns the total credit with filter.
 	SumCreditByUserIDWithFilter(ctx context.Context, userID int64, filter EntryFilter) (float64, error)
+
+	// FindExportRows returns every line of a user as flat export rows in
+	// chronological order (no pagination: export covers all filtered data).
+	FindExportRows(ctx context.Context, userID int64, filter EntryFilter) ([]ExportRow, error)
+
+	// RecalculateAccountBalance recalculates account balances for the given accounts or all accounts for a user.
+	// Kept as the healing/reconciliation path. Hot path (Create/Update/CreateBulk)
+	// uses ApplyBalanceDelta instead (O(lines in entry), not O(all lines)).
+	RecalculateAccountBalance(ctx context.Context, accountIDs []int64, userID int64) error
+
+	// InsertAuditLog records a journal action into the audit table.
+	InsertAuditLog(ctx context.Context, log *JournalAuditLog) error
+
+	// ApplyBalanceDelta applies pre-signed balance deltas atomically.
+	// deltas maps account_id -> signed amount, where signed amount is
+	// (debit - credit) * signFactor. signFactor is +1 for ASSET/EXPENSE/OTHER
+	// and -1 for LIABILITY/EQUITY/REVENUE (same as recalculate_account_balance).
+	// Implemented as a single UPSERT statement so concurrent writers cannot
+	// lose updates, and accounts without a balance row get one created.
+	ApplyBalanceDelta(ctx context.Context, deltas map[int64]float64) error
+}
+
+// ExportRow is one flat row for journal export: a single journal line with
+// its entry header and account code.
+type ExportRow struct {
+	Datetime    time.Time
+	Description string
+	AccountCode string
+	Debit       float64
+	Credit      float64
 }
 
 // EntryFilter contains filter options for listing journal entries.
