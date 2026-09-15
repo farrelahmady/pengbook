@@ -32,6 +32,7 @@ export const queryKeys = {
 	accounts: {
 		all: ["accounts"] as const,
 		summary: ["accounts", "summary"] as const,
+		posting: ["accounts", "posting"] as const,
 	},
 
 	// ── Assets ──────────────────────────────────────────────

@@ -48,8 +48,18 @@ func (r *journalRepository) CreateEntry(ctx context.Context, entry *journal.Jour
 	).Scan(&entry.ID, &entry.CreatedAt, &entry.UpdatedAt)
 	if err != nil {
 		log.Error("repo: failed to create journal entry", "user_id", entry.UserID, "error", err)
+		return err
 	}
-	return err
+
+	// Create lines if present
+	if len(entry.Lines) > 0 {
+		if err := r.createLines(ctx, entry.ID, entry.Lines); err != nil {
+			log.Error("repo: failed to create journal entry lines", "entry_id", entry.ID, "error", err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *journalRepository) createLines(ctx context.Context, entryID int64, lines []journal.JournalEntryLine) error {
@@ -59,6 +69,17 @@ func (r *journalRepository) createLines(ctx context.Context, entryID int64, line
 			entryID, lines[i].AccountID, lines[i].Debit, lines[i].Credit,
 		).Scan(&lines[i].ID, &lines[i].CreatedAt)
 		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *journalRepository) CreateEntries(ctx context.Context, entries []journal.JournalEntry) error {
+	log := logger.FromContext(ctx)
+	for i := range entries {
+		if err := r.CreateEntry(ctx, &entries[i]); err != nil {
+			log.Error("repo: failed to create journal entry in batch", "user_id", entries[i].UserID, "error", err)
 			return err
 		}
 	}
@@ -401,6 +422,29 @@ func (r *journalRepository) SumDebitByUserID(ctx context.Context, userID int64) 
 	var sum float64
 	err := r.db(ctx).QueryRow(ctx, sumDebitByUserIDQuery, userID).Scan(&sum)
 	return sum, err
+}
+
+func (r *journalRepository) RecalculateAccountBalance(ctx context.Context, accountIDs []int64, userID int64) error {
+	log := logger.FromContext(ctx)
+
+	var execErr error
+	if len(accountIDs) > 0 {
+		// Recalculate specific accounts
+		_, execErr = r.db(ctx).Exec(ctx, "SELECT * FROM recalculate_account_balance($1, NULL)", accountIDs)
+	} else if userID > 0 {
+		// Recalculate all accounts for a user
+		_, execErr = r.db(ctx).Exec(ctx, "SELECT * FROM recalculate_account_balance(NULL, $1)", []int64{userID})
+	} else {
+		// Recalculate all accounts
+		_, execErr = r.db(ctx).Exec(ctx, "SELECT * FROM recalculate_account_balance(NULL, NULL)")
+	}
+
+	if execErr != nil {
+		log.Error("repo: failed to recalculate account balance", "error", execErr)
+		return execErr
+	}
+
+	return nil
 }
 
 const sumCreditByUserIDQuery = `

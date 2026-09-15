@@ -165,6 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	const getToken = useCallback(async (): Promise<string | null> => {
 		let token = getAccessToken();
 
+		console.log(`Token = ${token}`);
+
 		// Token expired or expiring soon → refresh
 		if (!token || isTokenExpiringSoon(token)) {
 			const refreshed = await tryRefresh();
@@ -183,6 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	// Register getToken globally so services can access it without parameter passing
 	useEffect(() => {
+		console.log("Set Token Provider");
 		setTokenProvider(getToken);
 	}, [getToken]);
 
@@ -315,7 +318,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				await authService.logout(refreshToken);
 				logger.debug("Logout API call successful");
 			} catch (error) {
-				logger.warn("Logout API call failed (clearing local state anyway)", { error });
+				logger.warn("Logout API call failed (clearing local state anyway)", {
+					error,
+				});
 			}
 		}
 

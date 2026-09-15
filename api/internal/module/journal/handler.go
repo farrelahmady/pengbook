@@ -28,7 +28,9 @@ func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", h.GetAllScrollView)
 	r.Get("/summary", h.GetTotalSummary)
+	r.Get("/template", h.DownloadTemplate)
 	r.Post("/", h.Create)
+	r.Post("/upload", h.Upload)
 	r.Put("/{id}", h.Update)
 	return r
 }
@@ -129,6 +131,106 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusCreated, created)
+}
+
+// DownloadTemplate handles GET /api/v1/journals/template
+// Generates an Excel template with user's posting accounts.
+func (h *Handler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	template, err := h.service.GenerateTemplate(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to generate template")
+		return
+	}
+
+	// Set headers for Excel file download
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=template-jurnal.xlsx")
+	w.Header().Set("Content-Length", strconv.Itoa(len(template)))
+
+	w.Write(template)
+}
+
+// Upload handles POST /api/v1/journals/upload
+// Accepts a CSV or Excel file via multipart form.
+func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// Parse multipart form (max 5MB)
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		response.Error(w, http.StatusBadRequest, "failed to parse form: file is required")
+		return
+	}
+
+	// Get uploaded file
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	// Validate file extension
+	filename := strings.ToLower(header.Filename)
+	isCSV := strings.HasSuffix(filename, ".csv")
+	isExcel := strings.HasSuffix(filename, ".xlsx") || strings.HasSuffix(filename, ".xls")
+
+	if !isCSV && !isExcel {
+		response.Error(w, http.StatusBadRequest, "file must be a CSV (.csv) or Excel (.xlsx)")
+		return
+	}
+
+	// Parse file based on extension
+	var entries []CreateJournalRequest
+
+	if isExcel {
+		entries, err = ParseExcel(file)
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid Excel: "+err.Error())
+			return
+		}
+	} else {
+		entries, err = ParseCSV(file)
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid CSV: "+err.Error())
+			return
+		}
+	}
+
+	if len(entries) == 0 {
+		response.Error(w, http.StatusBadRequest, "no valid entries found in file")
+		return
+	}
+
+	// Process entries
+	count, err := h.service.CreateBulk(r.Context(), userID, CreateBulkJournalRequest{Entries: entries})
+	if err != nil {
+		if errors.Is(err, ErrNotBalanced) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidLines) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, ErrNotPostingAccount) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "failed to upload journals")
+		return
+	}
+
+	response.Success(w, http.StatusCreated, map[string]int64{"count": count})
 }
 
 // Update handles PUT /api/v1/journals/{id}

@@ -4,11 +4,14 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
+import { accountService } from "@/services/account";
 import { JournalEntry } from "@/types";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("EditBasicForm");
 
 interface EditBasicFormProps {
 	journal: JournalEntry;
@@ -18,6 +21,11 @@ interface EditBasicFormProps {
 export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 	const t = useTranslations("journalPage.basic");
 	const queryClient = useQueryClient();
+
+	const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery({
+		queryKey: queryKeys.accounts.posting,
+		queryFn: () => accountService.getPostingAccounts(),
+	});
 
 	// Parse existing journal lines to get from/to accounts
 	const existingLines = journal.lines;
@@ -114,9 +122,10 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 					value={fromAccount}
 					onChange={(e) => setFrom(e.target.value)}
 					className={`${inputClass} appearance-none`}
+					disabled={isLoadingAccounts}
 				>
-					<option value="">{t("fromPlaceholder")}</option>
-					{POSTING_ACCOUNTS.map((a) => (
+					<option value="">{isLoadingAccounts ? "Loading..." : t("fromPlaceholder")}</option>
+					{postingAccounts.map((a) => (
 						<option key={a.id} value={a.id}>
 							{a.code} · {a.name}
 						</option>
@@ -138,9 +147,10 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 					value={toAccount}
 					onChange={(e) => setTo(e.target.value)}
 					className={`${inputClass} appearance-none`}
+					disabled={isLoadingAccounts}
 				>
-					<option value="">{t("toPlaceholder")}</option>
-					{POSTING_ACCOUNTS.map((a) => (
+					<option value="">{isLoadingAccounts ? "Loading..." : t("toPlaceholder")}</option>
+					{postingAccounts.map((a) => (
 						<option key={a.id} value={a.id}>
 							{a.code} · {a.name}
 						</option>

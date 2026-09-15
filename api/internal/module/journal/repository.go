@@ -12,6 +12,9 @@ type Repository interface {
 	// CreateEntry creates a new journal entry with its lines in a transaction.
 	CreateEntry(ctx context.Context, entry *JournalEntry) error
 
+	// CreateEntries creates multiple journal entries with their lines in a batch.
+	CreateEntries(ctx context.Context, entries []JournalEntry) error
+
 	// FindEntryByID returns a journal entry by id, including its lines.
 	FindEntryByID(ctx context.Context, id int64) (*JournalEntry, error)
 
@@ -47,6 +50,9 @@ type Repository interface {
 
 	// SumCreditByUserIDWithFilter returns the total credit with filter.
 	SumCreditByUserIDWithFilter(ctx context.Context, userID int64, filter EntryFilter) (float64, error)
+
+	// RecalculateAccountBalance recalculates account balances for the given accounts or all accounts for a user.
+	RecalculateAccountBalance(ctx context.Context, accountIDs []int64, userID int64) error
 }
 
 // EntryFilter contains filter options for listing journal entries.

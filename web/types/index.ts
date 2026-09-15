@@ -106,7 +106,8 @@ export interface JournalEntryListResponse {
 }
 
 export interface JournalLineDto {
-	accountId: number;
+	accountId?: number;
+	accountCode?: string;
 	debit: number;
 	credit: number;
 }
@@ -121,6 +122,13 @@ export interface JournalSummary {
 	totalDebit: number;
 	totalCredit: number;
 	transactionCount: number;
+}
+
+// Posting Account (simplified for journal forms)
+export interface PostingAccount {
+	id: number;
+	code: string;
+	name: string;
 }
 
 export type JournalMode = "basic" | "advanced";

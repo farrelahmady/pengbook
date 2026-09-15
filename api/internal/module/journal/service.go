@@ -33,6 +33,12 @@ type Service interface {
 
 	// Update updates an existing journal entry.
 	Update(ctx context.Context, userID int64, entryID int64, req UpdateJournalRequest) (*JournalEntryResponse, error)
+
+	// CreateBulk creates multiple journal entries from a bulk upload.
+	CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error)
+
+	// GenerateTemplate generates an Excel template with user's posting accounts.
+	GenerateTemplate(ctx context.Context, userID int64) ([]byte, error)
 }
 
 type service struct {
@@ -202,6 +208,13 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateJournalReq
 		}
 
 		entryID = entry.ID
+
+		// Recalculate account balances for affected accounts
+		if err := s.repo.RecalculateAccountBalance(ctx, accountIDs, userID); err != nil {
+			log.Warn("journal create: failed to recalculate account balance", "user_id", userID, "error", err)
+			// Don't fail the transaction, just log the warning
+		}
+
 		return nil
 	})
 
@@ -306,7 +319,17 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 		existing.Description = req.Description
 		existing.Lines = lines
 
-		return s.repo.UpdateEntry(ctx, existing)
+		if err := s.repo.UpdateEntry(ctx, existing); err != nil {
+			return err
+		}
+
+		// Recalculate account balances for affected accounts
+		if err := s.repo.RecalculateAccountBalance(ctx, accountIDs, userID); err != nil {
+			log.Warn("journal update: failed to recalculate account balance", "user_id", userID, "entry_id", entryID, "error", err)
+			// Don't fail the transaction, just log the warning
+		}
+
+		return nil
 	})
 
 	if err != nil {
@@ -324,6 +347,172 @@ func (s *service) Update(ctx context.Context, userID int64, entryID int64, req U
 	log.Info("journal updated", "user_id", userID, "entry_id", entryID, "line_count", len(req.Lines))
 	resp := toEntryResponse(updated)
 	return &resp, nil
+}
+
+func (s *service) CreateBulk(ctx context.Context, userID int64, req CreateBulkJournalRequest) (int64, error) {
+	log := logger.FromContext(ctx)
+
+	if len(req.Entries) == 0 {
+		return 0, errors.New("no entries provided")
+	}
+
+	// Collect all account codes from all entries for batch lookup
+	allAccountCodes := make(map[string]bool)
+	for _, entry := range req.Entries {
+		for _, line := range entry.Lines {
+			if line.AccountCode != "" {
+				allAccountCodes[line.AccountCode] = true
+			}
+		}
+	}
+
+	accountCodes := make([]string, 0, len(allAccountCodes))
+	for code := range allAccountCodes {
+		accountCodes = append(accountCodes, code)
+	}
+
+	// Find accounts by codes
+	accountsByCode, err := s.accountRepo.FindByCodes(ctx, accountCodes)
+	if err != nil {
+		log.Error("journal create bulk: failed to find accounts by codes", "user_id", userID, "error", err)
+		return 0, err
+	}
+
+	// Validate all accounts exist, are owned by user, and are posting accounts
+	for code, acc := range accountsByCode {
+		if acc == nil {
+			log.Warn("journal create bulk: account not found by code", "user_id", userID, "account_code", code)
+			return 0, errors.New("account not found: " + code)
+		}
+		if acc.UserID != userID {
+			log.Warn("journal create bulk: account not owned by user", "user_id", userID, "account_code", code)
+			return 0, errors.New("account not found: " + code)
+		}
+		if !acc.CanPost() {
+			log.Warn("journal create bulk: not a posting account", "user_id", userID, "account_code", code, "level", acc.Level)
+			return 0, ErrNotPostingAccount
+		}
+	}
+
+	// Build all entries with resolved account IDs
+	entries := make([]JournalEntry, 0, len(req.Entries))
+	allAccountIDs := make(map[int64]bool)
+	for _, entryReq := range req.Entries {
+		// Validate lines
+		if len(entryReq.Lines) < 2 {
+			log.Warn("journal create bulk: invalid lines", "user_id", userID, "line_count", len(entryReq.Lines))
+			return 0, ErrInvalidLines
+		}
+
+		// Validate balanced
+		totalDebit, totalCredit := 0.0, 0.0
+		for _, l := range entryReq.Lines {
+			totalDebit += l.Debit
+			totalCredit += l.Credit
+		}
+		if totalDebit != totalCredit {
+			log.Warn("journal create bulk: not balanced", "user_id", userID, "debit", totalDebit, "credit", totalCredit)
+			return 0, ErrNotBalanced
+		}
+
+		// Parse date
+		date, err := time.Parse(time.RFC3339, entryReq.Date)
+		if err != nil {
+			log.Warn("journal create bulk: invalid date", "user_id", userID, "date", entryReq.Date)
+			return 0, errors.New("invalid date format, expected RFC3339 (e.g. 2026-04-21T10:30:00+07:00)")
+		}
+
+		// Build lines with resolved account IDs
+		lines := make([]JournalEntryLine, len(entryReq.Lines))
+		for i, l := range entryReq.Lines {
+			var accountID int64
+			if l.AccountID > 0 {
+				accountID = l.AccountID
+			} else if l.AccountCode != "" {
+				if acc, ok := accountsByCode[l.AccountCode]; ok && acc != nil {
+					accountID = acc.ID
+				} else {
+					return 0, errors.New("account not found: " + l.AccountCode)
+				}
+			} else {
+				return 0, errors.New("account id or account code is required")
+			}
+			allAccountIDs[accountID] = true
+			lines[i] = JournalEntryLine{
+				AccountID: accountID,
+				Debit:     l.Debit,
+				Credit:    l.Credit,
+			}
+		}
+
+		entries = append(entries, JournalEntry{
+			UserID:      userID,
+			Date:        date,
+			Description: entryReq.Description,
+			Lines:       lines,
+		})
+	}
+
+	// Convert map to slice for balance recalculation
+	accountIDs := make([]int64, 0, len(allAccountIDs))
+	for id := range allAccountIDs {
+		accountIDs = append(accountIDs, id)
+	}
+
+	// Use transaction to ensure atomicity
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+		if err := s.repo.CreateEntries(ctx, entries); err != nil {
+			return err
+		}
+
+		// Recalculate account balances for all affected accounts
+		if err := s.repo.RecalculateAccountBalance(ctx, accountIDs, userID); err != nil {
+			log.Warn("journal create bulk: failed to recalculate account balance", "user_id", userID, "error", err)
+			// Don't fail the transaction, just log the warning
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Error("journal create bulk: failed to create entries", "user_id", userID, "error", err)
+		return 0, err
+	}
+
+	log.Info("journal entries created in bulk", "user_id", userID, "count", len(entries))
+	return int64(len(entries)), nil
+}
+
+func (s *service) GenerateTemplate(ctx context.Context, userID int64) ([]byte, error) {
+	log := logger.FromContext(ctx)
+
+	// Fetch user's posting accounts
+	accounts, err := s.accountRepo.FindPostingByUserID(ctx, userID)
+	if err != nil {
+		log.Error("journal GenerateTemplate: failed to fetch posting accounts", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	// Convert to AccountInfo for template generation
+	accountInfos := make([]AccountInfo, len(accounts))
+	for i, acc := range accounts {
+		accountInfos[i] = AccountInfo{
+			Code:  acc.Code,
+			Name:  acc.Name,
+			Type:  string(acc.Type),
+			Level: acc.Level,
+		}
+	}
+
+	// Generate Excel template
+	template, err := GenerateTemplateWithAccounts(accountInfos)
+	if err != nil {
+		log.Error("journal GenerateTemplate: failed to generate template", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	log.Info("journal template generated", "user_id", userID, "account_count", len(accounts))
+	return template, nil
 }
 
 func toEntryResponse(e *JournalEntry) JournalEntryResponse {

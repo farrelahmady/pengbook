@@ -15,7 +15,10 @@ import { HttpRequestConfig } from "../types/http";
  */
 export function authMiddleware(getToken: () => Promise<string | null>) {
 	return async (config: HttpRequestConfig) => {
+		console.log("Auth Middleware");
+
 		const token = await getToken();
+		console.log(`Token Auth Middleware = ${token}`);
 
 		const headers = new Headers(config.headers);
 

@@ -18,9 +18,15 @@ type UpdateJournalRequest struct {
 
 // JournalLineDto is a single line in a journal entry request.
 type JournalLineDto struct {
-	AccountID int64   `json:"accountId" validate:"required"`
-	Debit     float64 `json:"debit" validate:"min=0"`
-	Credit    float64 `json:"credit" validate:"min=0"`
+	AccountID   int64   `json:"accountId,omitempty" validate:"omitempty"`
+	AccountCode string  `json:"accountCode,omitempty" validate:"omitempty"`
+	Debit       float64 `json:"debit" validate:"min=0"`
+	Credit      float64 `json:"credit" validate:"min=0"`
+}
+
+// CreateBulkJournalRequest is the DTO payload for POST /journals/upload.
+type CreateBulkJournalRequest struct {
+	Entries []CreateJournalRequest `json:"entries" validate:"required,min=1"`
 }
 
 // JournalEntryResponse is the journal entry response DTO.

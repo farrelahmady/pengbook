@@ -4,11 +4,14 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
+import { accountService } from "@/services/account";
 import { parseDecimal } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("BasicForm");
 
 interface BasicFormProps {
   onSuccess: () => void;
@@ -24,6 +27,11 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
   const [amount, setAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery({
+    queryKey: queryKeys.accounts.posting,
+    queryFn: () => accountService.getPostingAccounts(),
+  });
+
   async function handleSubmit() {
     if (!fromAccount || !toAccount || !amount) {
       toast.error(t("toastValidation"));
@@ -38,8 +46,8 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
     setIsSubmitting(true);
 
     try {
-      const from = POSTING_ACCOUNTS.find((a) => a.id === fromAccount);
-      const to = POSTING_ACCOUNTS.find((a) => a.id === toAccount);
+      const from = postingAccounts.find((a) => a.id === Number(fromAccount));
+      const to = postingAccounts.find((a) => a.id === Number(toAccount));
 
       await journalService.create({
         date: new Date(date).toISOString(),
@@ -98,9 +106,10 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
           value={fromAccount}
           onChange={(e) => setFrom(e.target.value)}
           className={selectClass}
+          disabled={isLoadingAccounts}
         >
-          <option value="">{t("fromPlaceholder")}</option>
-          {POSTING_ACCOUNTS.map((a) => (
+          <option value="">{isLoadingAccounts ? "Loading..." : t("fromPlaceholder")}</option>
+          {postingAccounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.code} · {a.name}
             </option>
@@ -124,9 +133,10 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
           value={toAccount}
           onChange={(e) => setTo(e.target.value)}
           className={selectClass}
+          disabled={isLoadingAccounts}
         >
-          <option value="">{t("toPlaceholder")}</option>
-          {POSTING_ACCOUNTS.map((a) => (
+          <option value="">{isLoadingAccounts ? "Loading..." : t("toPlaceholder")}</option>
+          {postingAccounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.code} · {a.name}
             </option>

@@ -6,10 +6,13 @@ import { formatNumber, parseDecimal } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
-import { POSTING_ACCOUNTS } from "@/lib/constants";
+import { accountService } from "@/services/account";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("AdvancedForm");
 
 interface JournalLine {
   accountId: string;
@@ -31,6 +34,11 @@ export function AdvancedForm({ onSuccess }: AdvancedFormProps) {
     { accountId: "", debit: "", credit: "" },
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery({
+    queryKey: queryKeys.accounts.posting,
+    queryFn: () => accountService.getPostingAccounts(),
+  });
 
   const totalDr = lines.reduce((s, l) => s + parseDecimal(l.debit), 0);
   const totalCr = lines.reduce((s, l) => s + parseDecimal(l.credit), 0);
@@ -141,9 +149,10 @@ export function AdvancedForm({ onSuccess }: AdvancedFormProps) {
                 value={line.accountId}
                 onChange={(e) => updateLine(i, "accountId", e.target.value)}
                 className="text-[11px] bg-secondary-50 border border-secondary-200 rounded-lg px-2 py-1.5 w-full appearance-none text-secondary-700 outline-none focus:border-primary-400"
+                disabled={isLoadingAccounts}
               >
-                <option value="">{t("accountPlaceholder")}</option>
-                {POSTING_ACCOUNTS.map((a) => (
+                <option value="">{isLoadingAccounts ? "Loading..." : t("accountPlaceholder")}</option>
+                {postingAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.code}
                   </option>
