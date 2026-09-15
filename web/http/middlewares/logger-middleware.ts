@@ -8,9 +8,9 @@ import { createLogger } from "@/lib/logger";
  * - Development: logs all requests (debug level)
  * - Production: logs requests at info level
  */
-export function loggerMiddleware() {
-	const logger = createLogger("http");
+const logger = createLogger("loggerMiddleware");
 
+export function loggerMiddleware() {
 	return async (config: HttpRequestConfig) => {
 		logger.debug("Request started", {
 			method: config.method,

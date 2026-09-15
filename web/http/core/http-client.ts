@@ -132,7 +132,6 @@ export class HttpClient {
 		let finalConfig = config;
 
 		for (const mw of this.requestMiddlewares) {
-			console.log("Middleware:", mw);
 			finalConfig = await mw(finalConfig);
 		}
 

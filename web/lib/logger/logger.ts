@@ -75,11 +75,7 @@ class LoggerImpl implements Logger {
 	/**
 	 * Internal log method with level filtering and context enrichment
 	 */
-	private log(
-		level: LogLevel,
-		message: string,
-		context?: LogContext,
-	): void {
+	private log(level: LogLevel, message: string, context?: LogContext): void {
 		if (!shouldLog(this.minLevel, level)) {
 			return;
 		}

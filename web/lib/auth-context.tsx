@@ -16,7 +16,21 @@ import { setOnRefreshFailed } from "@/lib/http-client";
 import { createLogger } from "@/lib/logger";
 import type { User, TokenResponse } from "@/types";
 
-const logger = createLogger("Auth");
+const logger = createLogger("AuthContext");
+
+type GetTokenFn = () => Promise<string | null>;
+
+// ── Global token provider (module scope) ────────────────────
+// Registered once at module load — BEFORE React mounts — so
+// getTokenProvider() never returns null due to useEffect timing.
+// The wrapper reads currentGetToken lazily at request time,
+// always getting the latest getToken from AuthProvider.
+let currentGetToken: GetTokenFn | null = null;
+
+setTokenProvider(async () => {
+	if (!currentGetToken) return null;
+	return currentGetToken();
+});
 
 // ── Cookie helpers ──────────────────────────────────────────
 
@@ -54,9 +68,10 @@ function getRefreshToken(): string | null {
 	return getCookie(REFRESH_TOKEN_KEY);
 }
 
-function setTokens(access: string, refresh: string) {
+function setTokens(access: string, refresh?: string) {
 	setCookie(ACCESS_TOKEN_KEY, access, ACCESS_TOKEN_MAX_AGE);
-	setCookie(REFRESH_TOKEN_KEY, refresh, REFRESH_TOKEN_MAX_AGE);
+	if (refresh != undefined)
+		setCookie(REFRESH_TOKEN_KEY, refresh, REFRESH_TOKEN_MAX_AGE);
 }
 
 function clearTokens() {
@@ -145,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		try {
 			logger.debug("Attempting token refresh");
 			const tokens = await authService.refresh(refreshToken);
-			setTokens(tokens.accessToken, tokens.refreshToken);
+			setTokens(tokens.accessToken);
 			logger.info("Token refresh successful");
 			return true;
 		} catch (error) {
@@ -165,8 +180,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	const getToken = useCallback(async (): Promise<string | null> => {
 		let token = getAccessToken();
 
-		console.log(`Token = ${token}`);
-
 		// Token expired or expiring soon → refresh
 		if (!token || isTokenExpiringSoon(token)) {
 			const refreshed = await tryRefresh();
@@ -183,11 +196,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	// ── Global token provider ──────────────────────────────
 
-	// Register getToken globally so services can access it without parameter passing
-	useEffect(() => {
-		console.log("Set Token Provider");
-		setTokenProvider(getToken);
-	}, [getToken]);
+	// Keep the module-scope wrapper pointed at the latest getToken.
+	// Assigned during render (latest-ref pattern) so it is available
+	// before any child effect triggers authHttpClient().
+	currentGetToken = getToken;
 
 	// ── Global refresh failed handler ──────────────────────
 
@@ -248,16 +260,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		// Check every 60 s — if token expires within 5 min, refresh
 		const interval = setInterval(async () => {
+			logger.debug("Checking Expiry Token");
 			const token = getAccessToken();
 			if (!token) return;
 
-			if (isTokenExpiringSoon(token)) {
-				const refreshed = await tryRefresh();
-				if (refreshed) {
-					const u = await fetchUser();
-					setUser(u);
-				}
+			// if (isTokenExpiringSoon(token)) {
+			const refreshed = await tryRefresh();
+			if (refreshed) {
+				const u = await fetchUser();
+				setUser(u);
 			}
+			// }
 		}, 60 * 1000);
 
 		return () => clearInterval(interval);

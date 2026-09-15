@@ -113,7 +113,6 @@ export function getOnRefreshFailed(): (() => Promise<void>) | null {
 let _authClient: HttpClient | null = null;
 
 export function authHttpClient() {
-	console.log(`!_authClient: ${!_authClient}`);
 	if (!_authClient) {
 		const getToken = getTokenProvider();
 		const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
@@ -122,7 +121,6 @@ export function authHttpClient() {
 			(config: HttpRequestConfig) => Promise<HttpRequestConfig>
 		> = [loggerMiddleware()];
 
-		console.log(`getToken = ${getToken}`);
 		// Add auth middleware if token provider exists
 		if (getToken) {
 			middlewares.push(authMiddleware(getToken));

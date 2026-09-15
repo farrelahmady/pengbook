@@ -22,6 +22,11 @@ export interface TokenResponse {
 	tokenType: string;
 }
 
+export interface RefreshTokenResponse extends Omit<
+	TokenResponse,
+	"refreshToken"
+> {}
+
 export interface LoginRequest {
 	identifier: string;
 	password: string;
