@@ -1040,7 +1040,7 @@ func TestHandler_Export_Success(t *testing.T) {
 	}
 
 	// Exported file must be re-uploadable and contain our entry.
-	parsed, err := journal.ParseExcel(bytes.NewReader(w.Body.Bytes()))
+	parsed, err := journal.ParseExcel(bytes.NewReader(w.Body.Bytes()), time.UTC)
 	if err != nil {
 		t.Fatalf("ParseExcel(exported): %v", err)
 	}
@@ -1250,6 +1250,114 @@ func TestHandler_Summary_Month_Unauthorized(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_GetAllScrollView_InvalidFilter(t *testing.T) {
+	tc := setup(t)
+	userID := createUser(t, tc)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	for _, query := range []string{
+		"limit=10&startDate=bukan-tanggal",
+		"limit=10&endDate=bukan-tanggal",
+		"limit=10&cursor=bukan-cursor",
+		"limit=10&cursor=2026-09-16T05%3A00%3A00.000Z_bukan-id",
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/journals?"+query, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("query %q: expected status 400, got %d: %s", query, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestHandler_Export_Timezone(t *testing.T) {
+	tc := setup(t)
+	ctx := context.Background()
+	userID := createUser(t, tc)
+	accID1 := createAccount(t, tc, userID, "1.01.01.01")
+	accID2 := createAccount(t, tc, userID, "4.01.01.01")
+
+	// 2026-03-10 02:00 +07:00 == 2026-03-09 19:00Z == 2026-03-10 08:00 +13:00.
+	// UTC and Auckland (+13:00 DST) disagree on the calendar day: the tz
+	// param decides which one the export renders.
+	created, err := tc.jnlSvc.Create(ctx, userID, journal.CreateJournalRequest{
+		Date:        "2026-03-10T02:00:00+07:00",
+		Description: "TZ export",
+		Lines: []journal.JournalLineDto{
+			{AccountID: accID1, Debit: 100000, Credit: 0},
+			{AccountID: accID2, Debit: 0, Credit: 100000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	defer tc.jnlRepo.DeleteEntry(ctx, created.ID)
+
+	handler := journal.NewHandler(tc.jnlSvc)
+	r := chi.NewRouter()
+	r.Use(authMiddleware(userID))
+	r.Use(middleware.Timezone)
+	r.Mount("/api/v1/journals", handler.Routes())
+
+	get := func(tz string) []byte {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/export", nil)
+		if tz != "" {
+			req.Header.Set("X-Timezone", tz)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("tz %q: expected status 200, got %d: %s", tz, w.Code, w.Body.String())
+		}
+		return w.Body.Bytes()
+	}
+
+	// Auckland (+13:00 DST in March) renders 2026-03-10...
+	auckland, err := journal.ParseExcel(bytes.NewReader(get("Pacific/Auckland")), time.UTC)
+	if err != nil {
+		t.Fatalf("ParseExcel(auckland export): %v", err)
+	}
+	if len(auckland) != 1 || !strings.HasPrefix(auckland[0].Date, "2026-03-10") {
+		t.Fatalf("expected 2026-03-10 entry in Auckland export, got %+v", auckland)
+	}
+
+	// ...while UTC renders the previous calendar day for the same instant.
+	// This pair proves the header actually drives the rendering.
+	utc, err := journal.ParseExcel(bytes.NewReader(get("")), time.UTC)
+	if err != nil {
+		t.Fatalf("ParseExcel(utc export): %v", err)
+	}
+	if len(utc) != 1 || !strings.HasPrefix(utc[0].Date, "2026-03-09") {
+		t.Fatalf("expected 2026-03-09 entry in UTC export, got %+v", utc)
+	}
+
+	// Jakarta keeps the original calendar day.
+	jakarta, err := journal.ParseExcel(bytes.NewReader(get("Asia/Jakarta")), time.UTC)
+	if err != nil {
+		t.Fatalf("ParseExcel(jakarta export): %v", err)
+	}
+	if len(jakarta) != 1 || !strings.HasPrefix(jakarta[0].Date, "2026-03-10") {
+		t.Fatalf("expected 2026-03-10 entry in Jakarta export, got %+v", jakarta)
+	}
+
+	// Unknown zone falls back to UTC instead of failing.
+	get("Bukan/Zona")
+
+	// Invalid date filter is a 400, not a silent unfiltered export.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/export?startDate=bogus", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

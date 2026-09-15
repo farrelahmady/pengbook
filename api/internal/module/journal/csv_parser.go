@@ -28,6 +28,8 @@ var csvDateFormats = []string{
 }
 
 // ParseCSV parses a CSV file content and returns journal entry requests.
+// Calendar dates (without offset) are interpreted at midnight in loc (the
+// client's timezone); instants with an explicit offset are absolute.
 //
 // CSV format:
 //
@@ -36,7 +38,7 @@ var csvDateFormats = []string{
 //	2026-04-21,Pembelian perlengkapan,1.01.02.01,0,500000
 //
 // Lines with the same date + description are grouped into one journal entry.
-func ParseCSV(reader io.Reader) ([]CreateJournalRequest, error) {
+func ParseCSV(reader io.Reader, loc *time.Location) ([]CreateJournalRequest, error) {
 	csvReader := csv.NewReader(reader)
 	csvReader.TrimLeadingSpace = true
 
@@ -99,7 +101,7 @@ func ParseCSV(reader io.Reader) ([]CreateJournalRequest, error) {
 		}
 
 		// Parse date
-		parsedDate, err := parseDate(dateStr)
+		parsedDate, err := parseDate(dateStr, loc)
 		if err != nil {
 			return nil, fmt.Errorf("row %d: invalid date %q: %w", lineNum, dateStr, err)
 		}
@@ -157,9 +159,14 @@ func ParseCSV(reader io.Reader) ([]CreateJournalRequest, error) {
 }
 
 // parseDate tries multiple date formats and returns the parsed time.
-func parseDate(s string) (time.Time, error) {
+// Layouts carrying an explicit offset parse absolutely (offset wins);
+// bare calendar dates resolve to midnight in loc (nil-safe: UTC).
+func parseDate(s string, loc *time.Location) (time.Time, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
 	for _, format := range csvDateFormats {
-		t, err := time.Parse(format, s)
+		t, err := time.ParseInLocation(format, s, loc)
 		if err == nil {
 			return t, nil
 		}

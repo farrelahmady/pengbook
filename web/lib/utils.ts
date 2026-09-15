@@ -95,6 +95,19 @@ export function dateInputToISO(date: string): string {
 }
 
 /**
+ * Client's IANA timezone name (e.g. "Asia/Jakarta").
+ * Centralized so every API call needing calendar rendering in the client's
+ * zone reads it from one place. Falls back to "UTC" when unavailable (SSR).
+ */
+export function getTimeZone(): string {
+	try {
+		return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+	} catch {
+		return "UTC";
+	}
+}
+
+/**
  * Full ISO-8601 instant like toISOString(), but keeping the *local* offset
  * (`+07:00`) instead of converting to UTC (`Z`).
  *

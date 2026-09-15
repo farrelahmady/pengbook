@@ -77,6 +77,10 @@ func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.GetAllScrollView(r.Context(), userID, req)
 	if err != nil {
+		if errors.Is(err, ErrInvalidFilter) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to get journals")
 		return
 	}
@@ -186,14 +190,16 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 
 	export, err := h.service.ExportExcel(r.Context(), userID, req)
 	if err != nil {
+		if errors.Is(err, ErrInvalidFilter) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to generate export")
 		return
 	}
 
-	filenameDate := time.Now().Format("2006-01-02")
-	if loc, err := time.LoadLocation("Asia/Jakarta"); err == nil {
-		filenameDate = time.Now().In(loc).Format("2006-01-02")
-	}
+	// Filename date follows the client's timezone like the export content.
+	filenameDate := time.Now().In(middleware.LocationFromContext(r.Context())).Format("2006-01-02")
 
 	// Set headers for Excel file download
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -236,17 +242,20 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse file based on extension
+	// Parse file based on extension. Bare calendar dates in the file are read
+	// at midnight in the client's timezone (X-Timezone header); storage stays
+	// UTC. No extra form field needed: the header rides along automatically.
+	loc := middleware.LocationFromContext(r.Context())
 	var entries []CreateJournalRequest
 
 	if isExcel {
-		entries, err = ParseExcel(file)
+		entries, err = ParseExcel(file, loc)
 		if err != nil {
 			response.Error(w, http.StatusBadRequest, "invalid Excel: "+err.Error())
 			return
 		}
 	} else {
-		entries, err = ParseCSV(file)
+		entries, err = ParseCSV(file, loc)
 		if err != nil {
 			response.Error(w, http.StatusBadRequest, "invalid CSV: "+err.Error())
 			return

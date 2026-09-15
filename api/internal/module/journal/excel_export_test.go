@@ -21,7 +21,7 @@ func TestGenerateExport_RoundTrip(t *testing.T) {
 		{Code: "1.01.01.01", Name: "Kas", Type: "ASSET", Level: 3},
 	}
 
-	exported, err := journal.GenerateExport(rows, accounts)
+	exported, err := journal.GenerateExport(rows, accounts, time.UTC)
 	if err != nil {
 		t.Fatalf("GenerateExport: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestGenerateExport_RoundTrip(t *testing.T) {
 	}
 
 	// The export must be directly re-uploadable.
-	parsed, err := journal.ParseExcel(bytes.NewReader(exported))
+	parsed, err := journal.ParseExcel(bytes.NewReader(exported), time.UTC)
 	if err != nil {
 		t.Fatalf("ParseExcel(exported): %v", err)
 	}
@@ -57,7 +57,7 @@ func TestGenerateExport_RoundTrip(t *testing.T) {
 }
 
 func TestGenerateExport_Empty(t *testing.T) {
-	exported, err := journal.GenerateExport(nil, nil)
+	exported, err := journal.GenerateExport(nil, nil, time.UTC)
 	if err != nil {
 		t.Fatalf("GenerateExport: %v", err)
 	}

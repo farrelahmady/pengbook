@@ -5,6 +5,7 @@ import { EditJournalSheet } from "./edit-journal-sheet";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ReceiptText } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { format } from "date-fns";
 import { journalService } from "@/services/journal";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
@@ -23,7 +24,9 @@ interface JournalScrollViewProps {
 function groupByDate(journals: JournalEntryListItem[]) {
 	const map = new Map<string, JournalEntryListItem[]>();
 	for (const j of journals) {
-		const key = j.datetime.slice(0, 10);
+		// Local calendar day, not the raw UTC slice: the server stores
+		// instants (UTC) while the user thinks in their own timezone.
+		const key = format(new Date(j.datetime), "yyyy-MM-dd");
 		if (!map.has(key)) map.set(key, []);
 		map.get(key)!.push(j);
 	}
