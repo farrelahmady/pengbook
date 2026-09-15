@@ -3,6 +3,7 @@ package journal_test
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 
@@ -49,7 +50,7 @@ func TestParseExcel_Success(t *testing.T) {
 	}
 	excelData := createTestExcel(t, rows)
 
-	entries, err := journal.ParseExcel(bytes.NewReader(excelData))
+	entries, err := journal.ParseExcel(bytes.NewReader(excelData), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestParseExcel_MultipleEntries(t *testing.T) {
 	}
 	excelData := createTestExcel(t, rows)
 
-	entries, err := journal.ParseExcel(bytes.NewReader(excelData))
+	entries, err := journal.ParseExcel(bytes.NewReader(excelData), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestParseExcel_EmptySheet(t *testing.T) {
 		t.Fatalf("failed to create test Excel: %v", err)
 	}
 
-	_, err = journal.ParseExcel(bytes.NewReader(buffer.Bytes()))
+	_, err = journal.ParseExcel(bytes.NewReader(buffer.Bytes()), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for empty sheet")
 	}
@@ -136,7 +137,7 @@ func TestParseExcel_HeaderOnly(t *testing.T) {
 		t.Fatalf("failed to create test Excel: %v", err)
 	}
 
-	_, err = journal.ParseExcel(bytes.NewReader(buffer.Bytes()))
+	_, err = journal.ParseExcel(bytes.NewReader(buffer.Bytes()), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for header-only sheet")
 	}
@@ -149,7 +150,7 @@ func TestParseExcel_MissingDate(t *testing.T) {
 	}
 	excelData := createTestExcel(t, rows)
 
-	_, err := journal.ParseExcel(bytes.NewReader(excelData))
+	_, err := journal.ParseExcel(bytes.NewReader(excelData), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for missing date")
 	}
@@ -162,7 +163,7 @@ func TestParseExcel_MissingAccountCode(t *testing.T) {
 	}
 	excelData := createTestExcel(t, rows)
 
-	_, err := journal.ParseExcel(bytes.NewReader(excelData))
+	_, err := journal.ParseExcel(bytes.NewReader(excelData), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for missing account code")
 	}
@@ -174,7 +175,7 @@ func TestParseExcel_TooFewLines(t *testing.T) {
 	}
 	excelData := createTestExcel(t, rows)
 
-	_, err := journal.ParseExcel(bytes.NewReader(excelData))
+	_, err := journal.ParseExcel(bytes.NewReader(excelData), time.UTC)
 	if err == nil {
 		t.Fatal("expected error for entry with only 1 line")
 	}
@@ -213,7 +214,7 @@ func TestParseExcel_WithHeaderRow(t *testing.T) {
 		t.Fatalf("failed to create test Excel: %v", err)
 	}
 
-	entries, err := journal.ParseExcel(bytes.NewReader(buffer.Bytes()))
+	entries, err := journal.ParseExcel(bytes.NewReader(buffer.Bytes()), time.UTC)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

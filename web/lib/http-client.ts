@@ -1,6 +1,7 @@
 import { HttpClient } from "@/http/core/http-client";
 import { authMiddleware } from "@/http/middlewares/auth-middleware";
 import { loggerMiddleware } from "@/http/middlewares/logger-middleware";
+import { timezoneMiddleware } from "@/http/middlewares/timezone-middleware";
 import { authInterceptor } from "@/http/interceptors/auth-interceptor";
 import { HttpRequestConfig } from "@/http/types/http";
 import { getTokenProvider } from "@/lib/token-provider";
@@ -25,7 +26,7 @@ export function createHttpClient(getToken?: () => Promise<string | null>) {
 	const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 	const middlewares: Array<
 		(config: HttpRequestConfig) => Promise<HttpRequestConfig>
-	> = [loggerMiddleware()];
+	> = [loggerMiddleware(), timezoneMiddleware()];
 
 	if (getToken) {
 		middlewares.push(authMiddleware(getToken));
@@ -119,7 +120,7 @@ export function authHttpClient() {
 
 		const middlewares: Array<
 			(config: HttpRequestConfig) => Promise<HttpRequestConfig>
-		> = [loggerMiddleware()];
+		> = [loggerMiddleware(), timezoneMiddleware()];
 
 		// Add auth middleware if token provider exists
 		if (getToken) {

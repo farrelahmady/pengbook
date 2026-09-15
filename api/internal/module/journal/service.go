@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"pengbook/api/internal/database"
+	"pengbook/api/internal/middleware"
 	"pengbook/api/internal/module/account"
 	"pengbook/api/pkg/logger"
 )
@@ -755,16 +756,9 @@ func (s *service) ExportExcel(ctx context.Context, userID int64, filter ListRequ
 		entryFilter.EndDate = &t
 	}
 
-	// Calendar rendering follows the client's timezone; storage stays UTC.
-	// An unknown zone falls back to UTC rather than failing the export.
-	loc := time.UTC
-	if filter.Timezone != "" {
-		if l, err := time.LoadLocation(filter.Timezone); err == nil {
-			loc = l
-		} else {
-			log.Warn("journal ExportExcel: invalid timezone, falling back to UTC", "timezone", filter.Timezone)
-		}
-	}
+	// Calendar rendering follows the client's timezone (X-Timezone header,
+	// resolved by middleware); storage stays UTC.
+	loc := middleware.LocationFromContext(ctx)
 
 	rows, err := s.repo.FindExportRows(ctx, userID, entryFilter)
 	if err != nil {

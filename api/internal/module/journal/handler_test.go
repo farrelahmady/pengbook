@@ -1040,7 +1040,7 @@ func TestHandler_Export_Success(t *testing.T) {
 	}
 
 	// Exported file must be re-uploadable and contain our entry.
-	parsed, err := journal.ParseExcel(bytes.NewReader(w.Body.Bytes()))
+	parsed, err := journal.ParseExcel(bytes.NewReader(w.Body.Bytes()), time.UTC)
 	if err != nil {
 		t.Fatalf("ParseExcel(exported): %v", err)
 	}
@@ -1304,21 +1304,25 @@ func TestHandler_Export_Timezone(t *testing.T) {
 	handler := journal.NewHandler(tc.jnlSvc)
 	r := chi.NewRouter()
 	r.Use(authMiddleware(userID))
+	r.Use(middleware.Timezone)
 	r.Mount("/api/v1/journals", handler.Routes())
 
-	get := func(query string) []byte {
+	get := func(tz string) []byte {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/export"+query, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/export", nil)
+		if tz != "" {
+			req.Header.Set("X-Timezone", tz)
+		}
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
-			t.Fatalf("query %q: expected status 200, got %d: %s", query, w.Code, w.Body.String())
+			t.Fatalf("tz %q: expected status 200, got %d: %s", tz, w.Code, w.Body.String())
 		}
 		return w.Body.Bytes()
 	}
 
 	// Auckland (+13:00 DST in March) renders 2026-03-10...
-	auckland, err := journal.ParseExcel(bytes.NewReader(get("?tz=Pacific%2FAuckland")))
+	auckland, err := journal.ParseExcel(bytes.NewReader(get("Pacific/Auckland")), time.UTC)
 	if err != nil {
 		t.Fatalf("ParseExcel(auckland export): %v", err)
 	}
@@ -1327,8 +1331,8 @@ func TestHandler_Export_Timezone(t *testing.T) {
 	}
 
 	// ...while UTC renders the previous calendar day for the same instant.
-	// This pair proves the tz param actually drives the rendering.
-	utc, err := journal.ParseExcel(bytes.NewReader(get("")))
+	// This pair proves the header actually drives the rendering.
+	utc, err := journal.ParseExcel(bytes.NewReader(get("")), time.UTC)
 	if err != nil {
 		t.Fatalf("ParseExcel(utc export): %v", err)
 	}
@@ -1337,7 +1341,7 @@ func TestHandler_Export_Timezone(t *testing.T) {
 	}
 
 	// Jakarta keeps the original calendar day.
-	jakarta, err := journal.ParseExcel(bytes.NewReader(get("?tz=Asia%2FJakarta")))
+	jakarta, err := journal.ParseExcel(bytes.NewReader(get("Asia/Jakarta")), time.UTC)
 	if err != nil {
 		t.Fatalf("ParseExcel(jakarta export): %v", err)
 	}
@@ -1346,7 +1350,7 @@ func TestHandler_Export_Timezone(t *testing.T) {
 	}
 
 	// Unknown zone falls back to UTC instead of failing.
-	get("?tz=Bukan%2FZona")
+	get("Bukan/Zona")
 
 	// Invalid date filter is a 400, not a silent unfiltered export.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/journals/export?startDate=bogus", nil)

@@ -170,7 +170,6 @@ export const journalService = {
 		startDate?: Date;
 		endDate?: Date;
 		accountIds?: string[];
-		timezone?: string;
 	}): Promise<Blob> => {
 		const client = authHttpClient();
 
@@ -181,7 +180,6 @@ export const journalService = {
 		if (request?.accountIds && request.accountIds.length > 0) {
 			params.set("accountIds", request.accountIds.join(","));
 		}
-		if (request?.timezone) params.set("tz", request.timezone);
 		const query = params.toString() ? `?${params}` : "";
 
 		logger.debug("Downloading journal export", {

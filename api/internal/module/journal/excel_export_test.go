@@ -30,7 +30,7 @@ func TestGenerateExport_RoundTrip(t *testing.T) {
 	}
 
 	// The export must be directly re-uploadable.
-	parsed, err := journal.ParseExcel(bytes.NewReader(exported))
+	parsed, err := journal.ParseExcel(bytes.NewReader(exported), time.UTC)
 	if err != nil {
 		t.Fatalf("ParseExcel(exported): %v", err)
 	}
