@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Minus } from "lucide-react";
-import { formatNumber, parseDecimal } from "@/lib/utils";
+import { dateInputToISO, formatNumber, parseDecimal } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -76,7 +76,7 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 
 		try {
 			await journalService.update(journal.id, {
-				date: new Date(date).toISOString(),
+				date: dateInputToISO(date),
 				description: description || undefined,
 				lines: lines.map((l) => ({
 					accountId: l.accountId,

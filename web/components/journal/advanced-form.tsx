@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Minus } from "lucide-react";
-import { formatNumber, parseDecimal } from "@/lib/utils";
+import { dateInputToISO, formatNumber, parseDecimal, todayLocalDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -27,7 +27,7 @@ interface AdvancedFormProps {
 export function AdvancedForm({ onSuccess }: AdvancedFormProps) {
   const t = useTranslations("journalPage.advanced");
   const queryClient = useQueryClient();
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayLocalDate());
   const [description, setDesc] = useState("");
   const [lines, setLines] = useState<JournalLine[]>([
     { accountId: "", debit: "", credit: "" },
@@ -70,7 +70,7 @@ export function AdvancedForm({ onSuccess }: AdvancedFormProps) {
 
     try {
       await journalService.create({
-        date: new Date(date).toISOString(),
+        date: dateInputToISO(date),
         description: description || undefined,
         lines: lines.map((l) => ({
           accountId: Number(l.accountId),

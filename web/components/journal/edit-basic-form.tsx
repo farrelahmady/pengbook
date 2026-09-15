@@ -8,6 +8,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { journalService } from "@/services/journal";
 import { accountService } from "@/services/account";
 import { JournalEntry } from "@/types";
+import { dateInputToISO } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
 import { createLogger } from "@/lib/logger";
 
@@ -55,8 +56,8 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 		setIsSubmitting(true);
 
 		journalService
-			.update(journal.id, {
-				date: new Date(date).toISOString(),
+			.		update(journal.id, {
+				date: dateInputToISO(date),
 				description: description || undefined,
 				lines: [
 					{

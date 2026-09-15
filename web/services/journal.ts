@@ -11,15 +11,13 @@ const logger = createLogger("journal.service");
 const API_BASE = "/api/v1";
 
 export const journalService = {
-	getAllScrollView: async (
-		request: {
-			limit: number;
-			cursor?: string;
-			startDate?: Date;
-			endDate?: Date;
-			accountIds?: string[];
-		},
-	): Promise<JournalEntryListResponse> => {
+	getAllScrollView: async (request: {
+		limit: number;
+		cursor?: string;
+		startDate?: Date;
+		endDate?: Date;
+		accountIds?: string[];
+	}): Promise<JournalEntryListResponse> => {
 		const client = authHttpClient();
 
 		const params = new URLSearchParams();
@@ -75,9 +73,7 @@ export const journalService = {
 		return res.data.data;
 	},
 
-	create: async (
-		dto: CreateJournalDto,
-	): Promise<JournalEntryListItem> => {
+	create: async (dto: CreateJournalDto): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
 
 		logger.debug("Creating journal entry");
@@ -95,7 +91,7 @@ export const journalService = {
 	},
 
 	update: async (
-		id: string,
+		id: number,
 		dto: CreateJournalDto,
 	): Promise<JournalEntryListItem> => {
 		const client = authHttpClient();
