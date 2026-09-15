@@ -62,6 +62,7 @@ func parseListRequest(r *http.Request) ListRequest {
 		StartDate:  startDate,
 		EndDate:    endDate,
 		AccountIDs: accountIDs,
+		Timezone:   r.URL.Query().Get("tz"),
 	}
 }
 
@@ -77,6 +78,10 @@ func (h *Handler) GetAllScrollView(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.service.GetAllScrollView(r.Context(), userID, req)
 	if err != nil {
+		if errors.Is(err, ErrInvalidFilter) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to get journals")
 		return
 	}
@@ -186,14 +191,22 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 
 	export, err := h.service.ExportExcel(r.Context(), userID, req)
 	if err != nil {
+		if errors.Is(err, ErrInvalidFilter) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to generate export")
 		return
 	}
 
-	filenameDate := time.Now().Format("2006-01-02")
-	if loc, err := time.LoadLocation("Asia/Jakarta"); err == nil {
-		filenameDate = time.Now().In(loc).Format("2006-01-02")
+	// Filename date follows the client's timezone like the export content.
+	loc := time.UTC
+	if req.Timezone != "" {
+		if l, err := time.LoadLocation(req.Timezone); err == nil {
+			loc = l
+		}
 	}
+	filenameDate := time.Now().In(loc).Format("2006-01-02")
 
 	// Set headers for Excel file download
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

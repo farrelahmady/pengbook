@@ -219,6 +219,44 @@ APP_ENV=development LOG_LEVEL=error
 
 ---
 
+## TIMEZONE RULE: Olah Ikut Client, Simpan Tetap UTC
+
+**PRINSIP: Database selalu menyimpan waktu sebagai UTC (`timestamptz`), tetapi semua pemaknaan kalender (hari, bulan, format tanggal) mengikuti timezone client pengirim request.**
+
+### Aturan
+
+1. **Database: selalu UTC** — kolom waktu bertipe `timestamptz`; tidak ada tanggal kalender yang disimpan tanpa offset.
+2. **Frontend → Backend: kirim instant yang utuh (offset ikut terkirim)** —
+   - Instant murni sebagai boundary (filter `startDate`/`endDate`, tanggal transaksi): `toISOString()` boleh dipakai karena boundary yang dimaksud memang instant itu sendiri.
+   - "Bulan/hari apa menurut user" (mis. ringkasan bulanan): kirim ISO **dengan offset lokal** via `localISO()` dari `@/lib/utils`, jangan `toISOString()` — `Z` menghilangkan offset sehingga 1 Okt 00:30 +07:00 tiba sebagai 30 Sep 17:30Z dan pemenggalan bulan mendarat di bulan yang salah.
+   - Nama zona IANA untuk rendering (mis. export file): `Intl.DateTimeFormat().resolvedOptions().timeZone` via param `tz`.
+3. **Backend: turunkan batas dari zona pengirim, jangan hardcode** — parse RFC3339 (`time.Parse` mempertahankan offset numerik), lalu bangun batas hari/bulan **di lokasi offset string itu**. Dilarang hardcode `Asia/Jakarta` di service. Zona tak dikenal → fallback UTC + warn (jangan gagalkan request untuk hal presentasional).
+4. **Backend: filter invalid → 400** — tanggal/cursor yang tak terparse tidak boleh diam-diam diabaikan: filter bocor = data di luar permintaan ikut terkirim; cursor rusak = client loop fetch halaman 1 selamanya. Gunakan sentinel error (mis. `ErrInvalidFilter`) agar handler bisa bedakan 400 vs 500.
+5. **Frontend display: format di zona lokal** — jangan `slice(0, 10)` string UTC untuk grouping kalender; parse → format `yyyy-MM-dd` lokal (date-fns). Contoh benar ada di `journal-scroll-view.tsx` (`groupByDate`).
+
+### Contoh
+
+```typescript
+// ❌ FRONTEND — offset hilang, bulan bisa geser di tengah malam
+const month = now.toISOString(); // "2026-09-30T17:30:00.000Z"
+
+// ✅ FRONTEND — zona ikut terkirim
+import { localISO } from "@/lib/utils";
+const month = localISO(now); // "2026-10-01T00:30:00+07:00"
+```
+
+```go
+// ❌ BACKEND — hardcode zona server
+loc, _ := time.LoadLocation("Asia/Jakarta")
+
+// ✅ BACKEND — zona dari request client
+t, _ := time.Parse(time.RFC3339, monthParam) // offset +07:00 dipertahankan
+loc := t.Location()
+start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, loc)
+```
+
+---
+
 ## Rules Lainnya
 
 Selain rules di atas, ikuti **Global Engineering Principles** dari opencode:

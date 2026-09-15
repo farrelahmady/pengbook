@@ -85,6 +85,9 @@ type ListRequest struct {
 	StartDate  string  `json:"startDate,omitempty" example:"2026-01-01T00:00:00+07:00"`
 	EndDate    string  `json:"endDate,omitempty" example:"2026-12-31T23:59:59+07:00"`
 	AccountIDs []int64 `json:"accountIds,omitempty"`
+	// Timezone is an IANA name (e.g. "Asia/Jakarta") sent by the client.
+	// Calendar rendering (export dates) follows it; storage stays UTC.
+	Timezone string `json:"timezone,omitempty" example:"Asia/Jakarta"`
 }
 
 // CursorPageResponse is the paginated list response with cursor for journal entries.

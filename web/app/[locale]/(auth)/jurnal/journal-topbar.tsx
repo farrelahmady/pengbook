@@ -7,7 +7,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { journalService } from "@/services/journal";
-import { localISO } from "@/lib/utils";
+import { getTimeZone, localISO } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { Download } from "lucide-react";
@@ -61,6 +61,7 @@ export default function JournalTopbar({
 				startDate,
 				endDate,
 				accountIds,
+				timezone: getTimeZone(),
 			});
 
 			const url = URL.createObjectURL(blob);

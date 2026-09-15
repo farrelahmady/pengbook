@@ -62,7 +62,10 @@ func writeAccountSheet(f *excelize.File, accounts []AccountInfo) error {
 // be re-uploaded as-is: Sheet 1 "Template Jurnal" has the same columns as the
 // upload format (Tanggal, Deskripsi, Kode Akun, Debit, Kredit), Sheet 2
 // "Daftar Akun" lists the user's posting accounts.
-func GenerateExport(rows []ExportRow, accounts []AccountInfo) ([]byte, error) {
+//
+// Dates are rendered as calendar dates in loc (the client's timezone).
+// Storage stays UTC; only presentation follows the client.
+func GenerateExport(rows []ExportRow, accounts []AccountInfo, loc *time.Location) ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 
@@ -90,9 +93,7 @@ func GenerateExport(rows []ExportRow, accounts []AccountInfo) ([]byte, error) {
 
 	// Dates are written as YYYY-MM-DD strings (same as the template examples):
 	// unambiguous for parseExcelDate and immune to Excel serial quirks.
-	// Times are rendered in Asia/Jakarta (the app's audience) with UTC fallback.
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
+	if loc == nil {
 		loc = time.UTC
 	}
 	for r, row := range rows {
