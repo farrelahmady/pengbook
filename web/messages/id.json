@@ -148,7 +148,27 @@
 			"sub": "Kas + Bank"
 		},
 		"emptyTitle": "Belum ada aset",
-		"emptyDescription": "Tambahkan akun aset untuk mulai melacak kekayaan Anda."
+		"emptyDescription": "Tambahkan akun aset untuk mulai melacak kekayaan Anda.",
+		"expandAll": "Buka semua",
+		"collapseAll": "Tutup semua",
+		"error": {
+			"title": "Gagal memuat aset",
+			"description": "Periksa koneksi Anda lalu coba lagi.",
+			"retry": "Coba lagi"
+		},
+		"search": {
+			"placeholder": "Cari kode atau nama aset...",
+			"clear": "Hapus",
+			"resultCount": "{count} hasil untuk '{query}'",
+			"emptyTitle": "Tidak ada aset yang cocok",
+			"emptyDescription": "Coba kata kunci lain atau hapus pencarian."
+		},
+		"groupSubtitle": "{count} sub-akun",
+		"badge": {
+			"posting": "Posting"
+		},
+		"subtotalLabel": "Subtotal debit bersih",
+		"subtotalValue": "DR {value}"
 	},
 	"reportPage": {
 		"title": "Laporan Keuangan",

@@ -148,7 +148,27 @@
 			"sub": "Cash + Bank"
 		},
 		"emptyTitle": "No assets yet",
-		"emptyDescription": "Add asset accounts to start tracking your wealth."
+		"emptyDescription": "Add asset accounts to start tracking your wealth.",
+		"expandAll": "Expand all",
+		"collapseAll": "Collapse all",
+		"error": {
+			"title": "Failed to load assets",
+			"description": "Check your connection and try again.",
+			"retry": "Try again"
+		},
+		"search": {
+			"placeholder": "Search by code or name...",
+			"clear": "Clear",
+			"resultCount": "{count} results for '{query}'",
+			"emptyTitle": "No matching assets",
+			"emptyDescription": "Try a different keyword or clear the search."
+		},
+		"groupSubtitle": "{count} sub-accounts",
+		"badge": {
+			"posting": "Posting"
+		},
+		"subtotalLabel": "Net debit subtotal",
+		"subtotalValue": "DR {value}"
 	},
 	"reportPage": {
 		"title": "Financial Reports",

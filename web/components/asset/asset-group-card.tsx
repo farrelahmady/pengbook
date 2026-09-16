@@ -3,22 +3,26 @@
 import { AssetGroup } from "@/types";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { ChevronUp } from "lucide-react";
 
 interface AssetGroupCardProps {
-	group: AssetGroup;
+	group: AssetGroup & { matchCount?: number };
+	expanded: boolean;
+	onToggle: () => void;
 }
 
-export function AssetGroupCard({ group }: AssetGroupCardProps) {
-	const [expanded, setExpanded] = useState(true);
+export function AssetGroupCard({ group, expanded, onToggle }: AssetGroupCardProps) {
+	const t = useTranslations("assetPage");
 	const currencyFormat = useCurrencyFormatter();
 
 	return (
 		<div className="card-default shadow-card overflow-hidden">
 			{/* Header */}
 			<button
-				onClick={() => setExpanded(!expanded)}
+				onClick={onToggle}
+				aria-expanded={expanded}
+				aria-controls={`asset-group-${group.id}`}
 				className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-secondary-50 transition-colors"
 			>
 				<div className="flex-1 min-w-0">
@@ -37,7 +41,7 @@ export function AssetGroupCard({ group }: AssetGroupCardProps) {
 						{currencyFormat(group.totalBalance, { compact: true, currency: "Rp" })}
 					</p>
 					<p className="font-mono text-[10px] text-secondary-400">
-						{group.accounts.length} sub-akun
+						{t("groupSubtitle", { count: group.accounts.length })}
 					</p>
 				</div>
 				<ChevronUp
@@ -51,7 +55,10 @@ export function AssetGroupCard({ group }: AssetGroupCardProps) {
 
 			{/* Sub-accounts */}
 			{expanded && group.accounts.length > 0 && (
-				<div className="border-t border-black/[0.06]">
+				<div
+					id={`asset-group-${group.id}`}
+					className="border-t border-black/[0.06]"
+				>
 					<div className="flex flex-col">
 						{group.accounts.map((account) => (
 							<div
@@ -80,7 +87,7 @@ export function AssetGroupCard({ group }: AssetGroupCardProps) {
 									</p>
 									{account.isPosting && (
 										<span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-success-50 text-success-700">
-											Posting
+											{t("badge.posting")}
 										</span>
 									)}
 								</div>
@@ -90,9 +97,14 @@ export function AssetGroupCard({ group }: AssetGroupCardProps) {
 
 					{/* Subtotal */}
 					<div className="flex items-center justify-between px-4 py-2.5 bg-secondary-50/50 border-t border-black/[0.06]">
-						<p className="text-[11px] text-secondary-400">Subtotal debit bersih</p>
+						<p className="text-[11px] text-secondary-400">
+							{t("subtotalLabel")}
+						</p>
 						<p className="font-mono text-[12px] font-medium text-secondary-600">
-							DR {currencyFormat(group.totalBalance, { compact: true, currency: "Rp" })}
+							{t("subtotalValue", {
+								sign: "DR",
+								value: currencyFormat(group.totalBalance, { compact: true, currency: "Rp" }),
+							})}
 						</p>
 					</div>
 				</div>
