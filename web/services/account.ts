@@ -64,9 +64,14 @@ export const accountService = {
 		type?: string,
 	): Promise<ParentListItem[]> => {
 		logger.debug("Fetching parent accounts", { level });
+
+		const params = new URLSearchParams();
+		params.set("level", String(level));
+		if (type) params.set(type, type);
+
 		const client = authHttpClient();
 		const res = await client.get<ApiResponse<ParentListItem[]>>(
-			`${API_BASE}/accounts/parents?level=${level}&type=${type}`,
+			`${API_BASE}/accounts/parents?${params}`,
 		);
 		logger.info("Parent accounts fetched", {
 			level,

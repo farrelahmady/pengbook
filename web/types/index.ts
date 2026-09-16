@@ -146,6 +146,7 @@ export interface PostingAccount {
 	id: number;
 	code: string;
 	name: string;
+	type: string;
 }
 
 export type JournalMode = "basic" | "advanced";

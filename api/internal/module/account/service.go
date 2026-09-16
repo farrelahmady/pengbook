@@ -356,6 +356,7 @@ func (s *service) GetPostingAccounts(ctx context.Context, userID int64) ([]Posti
 			ID:   a.ID,
 			Code: a.Code,
 			Name: a.Name,
+			Type: string(a.Type),
 		}
 	}
 	return result, nil

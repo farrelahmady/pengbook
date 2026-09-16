@@ -114,7 +114,7 @@ export function AdjustBalanceSheet({
 						{t("title")}
 					</h2>
 					<p className="text-[13px] text-secondary-500 mb-4">
-						{asset.code} — {asset.name}
+						{asset.code} · {asset.name}
 					</p>
 
 					<div className="flex flex-col gap-4">

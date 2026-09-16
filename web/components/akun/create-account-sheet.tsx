@@ -20,7 +20,10 @@ interface CreateAccountSheetProps {
 
 const LEVELS = [1, 2, 3] as const;
 
-export function CreateAccountSheet({ open, onOpenChange }: CreateAccountSheetProps) {
+export function CreateAccountSheet({
+	open,
+	onOpenChange,
+}: CreateAccountSheetProps) {
 	const t = useTranslations("accountPage.create");
 	const queryClient = useQueryClient();
 	const [level, setLevel] = useState<number>(3);
@@ -139,7 +142,7 @@ export function CreateAccountSheet({ open, onOpenChange }: CreateAccountSheetPro
 									<optgroup key={type} label={type}>
 										{list.map((p) => (
 											<option key={p.id} value={String(p.id)}>
-												{p.code} — {p.name}
+												{p.code} · {p.name}
 											</option>
 										))}
 									</optgroup>

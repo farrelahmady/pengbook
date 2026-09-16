@@ -105,7 +105,7 @@ export function CreateAssetSheet({
 								<option value="">{t("parentPlaceholder")}</option>
 								{assetParents.map((p: ParentListItem) => (
 									<option key={p.id} value={String(p.id)}>
-										{p.code} — {p.name}
+										{p.code} · {p.name}
 									</option>
 								))}
 							</select>

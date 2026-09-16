@@ -74,6 +74,7 @@ type PostingAccountResponse struct {
 	ID   int64  `json:"id"`
 	Code string `json:"code"`
 	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // ParentListItem is a lightweight candidate parent for the create-account form.
