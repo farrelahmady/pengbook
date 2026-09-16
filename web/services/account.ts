@@ -1,6 +1,6 @@
 import { authHttpClient } from "@/lib/http-client";
 import { createLogger } from "@/lib/logger";
-import { ApiResponse, AccountSummary, PostingAccount } from "@/types";
+import { ApiResponse, AccountSummary, AccountTree, PostingAccount } from "@/types";
 
 const logger = createLogger("account.service");
 
@@ -14,7 +14,7 @@ const API_BASE = "/api/v1";
  */
 export const accountService = {
 	/**
-	 * Get account summary with hierarchical tree.
+	 * Get account summary counts (lightweight, no tree).
 	 * Real API call to GET /api/v1/accounts/summary
 	 */
 	getSummary: async (): Promise<AccountSummary> => {
@@ -26,6 +26,22 @@ export const accountService = {
 		logger.info("Account summary fetched", {
 			totalAccounts: res.data.data.totalAccounts,
 			postingAccounts: res.data.data.postingAccounts,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Get account hierarchical tree grouped by type.
+	 * Real API call to GET /api/v1/accounts/tree
+	 */
+	getTree: async (): Promise<AccountTree> => {
+		logger.debug("Fetching account tree");
+		const client = authHttpClient();
+		const res = await client.get<ApiResponse<AccountTree>>(
+			`${API_BASE}/accounts/tree`,
+		);
+		logger.info("Account tree fetched", {
+			groups: res.data.data.groups.length,
 		});
 		return res.data.data;
 	},

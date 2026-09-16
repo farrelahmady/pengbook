@@ -245,5 +245,8 @@ export interface AccountSummary {
 	totalAccounts: number;
 	postingAccounts: number;
 	headerAccounts: number;
+}
+
+export interface AccountTree {
 	groups: AccountTypeGroup[];
 }

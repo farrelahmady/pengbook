@@ -10,10 +10,10 @@ import { BookOpen } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 
 export default function AccountList() {
-	const t = useTranslations("coaPage");
+	const t = useTranslations("accountPage");
 	const { data, isLoading } = useQuery({
-		queryKey: queryKeys.accounts.summary,
-		queryFn: () => accountService.getSummary(),
+		queryKey: queryKeys.accounts.tree,
+		queryFn: () => accountService.getTree(),
 	});
 
 	return (

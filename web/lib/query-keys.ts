@@ -34,6 +34,7 @@ export const queryKeys = {
 	accounts: {
 		all: ["accounts"] as const,
 		summary: ["accounts", "summary"] as const,
+		tree: ["accounts", "tree"] as const,
 		posting: ["accounts", "posting"] as const,
 	},
 

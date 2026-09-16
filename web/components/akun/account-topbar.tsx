@@ -11,7 +11,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { queryKeys } from "@/lib/query-keys";
 
 export default function AccountTopbar() {
-	const t = useTranslations("coaPage");
+	const t = useTranslations("accountPage");
 	const format = useFormatter();
 	const { data, isLoading } = useQuery({
 		queryKey: queryKeys.accounts.summary,

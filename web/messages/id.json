@@ -35,7 +35,7 @@
 		},
 		"filter": {
 			"dateRange": "Tanggal",
-			"coa": "Akun",
+			"account": "Akun",
 			"clear": "Reset",
 			"selectDateRange": "Pilih Rentang Tanggal",
 			"from": "Dari",
@@ -205,7 +205,7 @@
 			}
 		}
 	},
-	"coaPage": {
+	"accountPage": {
 		"title": "Bagan Akun",
 		"sectionTitle": "Perkiraan",
 		"summaryTotal": {

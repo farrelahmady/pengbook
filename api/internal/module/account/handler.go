@@ -26,6 +26,7 @@ func NewHandler(service Service) *Handler {
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/summary", h.GetSummary)
+	r.Get("/tree", h.GetTree)
 	r.Get("/posting", h.GetPostingAccounts)
 	r.Post("/", h.Create)
 	r.Put("/{id}", h.Update)
@@ -48,6 +49,23 @@ func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, summary)
+}
+
+// GetTree handles GET /api/v1/accounts/tree
+func (h *Handler) GetTree(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	tree, err := h.service.GetTree(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to get account tree")
+		return
+	}
+
+	response.Success(w, http.StatusOK, tree)
 }
 
 // GetPostingAccounts handles GET /api/v1/accounts/posting

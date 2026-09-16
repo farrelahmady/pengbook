@@ -20,8 +20,11 @@ var (
 
 // Service is the PORT (interface) for account business logic.
 type Service interface {
-	// GetSummary returns the COA summary with hierarchical tree for a user.
-	GetSummary(ctx context.Context, userID int64) (*CoaSummary, error)
+	// GetSummary returns the lightweight Account summary counts for a user.
+	GetSummary(ctx context.Context, userID int64) (*AccountSummary, error)
+
+	// GetTree returns the Account hierarchical tree grouped by type for a user.
+	GetTree(ctx context.Context, userID int64) (*AccountTree, error)
 
 	// Create creates a new account for the given user.
 	Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error)
@@ -45,7 +48,7 @@ func NewService(repo Repository, tx database.TxManager) Service {
 	return &service{repo: repo, tx: tx}
 }
 
-func (s *service) GetSummary(ctx context.Context, userID int64) (*CoaSummary, error) {
+func (s *service) GetSummary(ctx context.Context, userID int64) (*AccountSummary, error) {
 	total, err := s.repo.CountByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -61,6 +64,14 @@ func (s *service) GetSummary(ctx context.Context, userID int64) (*CoaSummary, er
 		return nil, err
 	}
 
+	return &AccountSummary{
+		TotalAccounts:   int(total),
+		PostingAccounts: int(posting),
+		HeaderAccounts:  int(header),
+	}, nil
+}
+
+func (s *service) GetTree(ctx context.Context, userID int64) (*AccountTree, error) {
 	accounts, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -72,11 +83,8 @@ func (s *service) GetSummary(ctx context.Context, userID int64) (*CoaSummary, er
 	// Group by type
 	groups := groupByType(tree)
 
-	return &CoaSummary{
-		TotalAccounts:   int(total),
-		PostingAccounts: int(posting),
-		HeaderAccounts:  int(header),
-		Groups:          groups,
+	return &AccountTree{
+		Groups: groups,
 	}, nil
 }
 
@@ -267,8 +275,8 @@ func buildTree(accounts []Account) []*AccountWithChildren {
 	return roots
 }
 
-// groupByType groups accounts by their type for the COA page.
-func groupByType(roots []*AccountWithChildren) []CoaTypeGroup {
+// groupByType groups accounts by their type for the Account page.
+func groupByType(roots []*AccountWithChildren) []AccountTypeGroup {
 	typeOrder := []string{"ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE", "OTHER"}
 	typeLabels := map[string]string{
 		"ASSET":     "Aset",
@@ -287,9 +295,9 @@ func groupByType(roots []*AccountWithChildren) []CoaTypeGroup {
 		"OTHER":     "wallet",
 	}
 
-	groupMap := make(map[string]*CoaTypeGroup)
+	groupMap := make(map[string]*AccountTypeGroup)
 	for _, t := range typeOrder {
-		groupMap[t] = &CoaTypeGroup{
+		groupMap[t] = &AccountTypeGroup{
 			Type:     t,
 			Label:    typeLabels[t],
 			Icon:     typeIcons[t],
@@ -316,7 +324,7 @@ func groupByType(roots []*AccountWithChildren) []CoaTypeGroup {
 	}
 
 	// Remove empty groups
-	var result []CoaTypeGroup
+	var result []AccountTypeGroup
 	for _, t := range typeOrder {
 		if group := groupMap[t]; len(group.Accounts) > 0 {
 			result = append(result, *group)

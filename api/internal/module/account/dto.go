@@ -26,7 +26,7 @@ type AccountResponse struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
-// AccountWithChildren is a recursive tree structure for COA hierarchy.
+// AccountWithChildren is a recursive tree structure for Account hierarchy.
 // Children uses pointers so buildTree links nodes instead of copying
 // value snapshots (copying loses children attached later). JSON output
 // is unchanged: an array of objects.
@@ -43,8 +43,8 @@ type AccountWithChildren struct {
 	Children  []*AccountWithChildren  `json:"children"`
 }
 
-// CoaTypeGroup groups accounts by type for the COA page.
-type CoaTypeGroup struct {
+// AccountTypeGroup groups accounts by type for the Account page.
+type AccountTypeGroup struct {
 	Type     string                 `json:"type"`
 	Label    string                 `json:"label"`
 	Icon     string                 `json:"icon"`
@@ -52,12 +52,17 @@ type CoaTypeGroup struct {
 	Count    int                    `json:"count"`
 }
 
-// CoaSummary is the summary response for the COA page.
-type CoaSummary struct {
-	TotalAccounts   int            `json:"totalAccounts"`
-	PostingAccounts int            `json:"postingAccounts"`
-	HeaderAccounts  int            `json:"headerAccounts"`
-	Groups          []CoaTypeGroup `json:"groups"`
+// AccountSummary is the lightweight summary response for the Account page.
+// It carries only counts; the hierarchical tree lives in AccountTree.
+type AccountSummary struct {
+	TotalAccounts   int `json:"totalAccounts"`
+	PostingAccounts int `json:"postingAccounts"`
+	HeaderAccounts  int `json:"headerAccounts"`
+}
+
+// AccountTree is the hierarchical tree response for the Account page.
+type AccountTree struct {
+	Groups []AccountTypeGroup `json:"groups"`
 }
 
 // PostingAccountResponse is a simplified response for posting accounts.

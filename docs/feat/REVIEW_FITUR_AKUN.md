@@ -1,7 +1,7 @@
 # Review Fitur Akun (Chart of Accounts)
 
 **Tanggal**: 16 September 2026
-**Status**: Perencanaan
+**Status**: Tahap 1 (F1) Selesai — `GET /tree` terpisah, rename Coa→Account
 **Dokumen Terkait**: [Review Fitur Jurnal](./REVIEW_FITUR_JURNAL.md), [Architecture Issues](../issues/ARCHITECTURE_ISSUES_2026-09-11.md)
 
 ---
@@ -18,7 +18,8 @@ Scope yang disetujui: F1 (pemecahan API tree terpisah, tahap pertama), F2 (`post
 
 | Komponen | Status | Lokasi |
 |----------|--------|--------|
-| API Summary (counts + tree) | ✅ Berfungsi, tapi kegemukan | `api/internal/module/account/handler.go` (`GetSummary`) |
+| API Summary (counts saja) | ✅ Dilangsingkan 16 Sep 2026 | `api/internal/module/account/handler.go` (`GetSummary`) |
+| API Tree (groups + tree) | ✅ Baru 16 Sep 2026 | `api/internal/module/account/handler.go` (`GetTree`) |
 | API Posting Accounts | ✅ Berfungsi | `api/internal/module/account/handler.go` (`GetPostingAccounts`) |
 | API Create | ✅ Ada, validasi parent lemah | `api/internal/module/account/service.go` (`Create`) |
 | API Update | ✅ Ada, validasi parent lemah | `api/internal/module/account/service.go` (`Update`) |
@@ -66,7 +67,7 @@ Scope yang disetujui: F1 (pemecahan API tree terpisah, tahap pertama), F2 (`post
 
 ### F5. Tidak Ada Search
 - **Masalah**: ~130 akun dalam 5 grup collapsed; tanpa search, mencari satu akun = expand-scroll manual.
-- **Dampak**: Navigasi COA lambat dan menyebalkan.
+- **Dampak**: Navigasi akun lambat dan menyebalkan.
 - **File**: `web/components/akun/account-list.tsx`
 - **Fix**: Input search filter code/nama + auto-expand grup yang cocok (filter tampilan, boleh di frontend). Detail di Plan F5.
 
@@ -94,7 +95,7 @@ Scope yang disetujui: F1 (pemecahan API tree terpisah, tahap pertama), F2 (`post
 ### Tahap 1: Pecah API + Pindahkan Count (F1, F2)
 
 **F1 — Endpoint `tree` terpisah dari `summary`:**
-1. **[Backend]** Tambah DTO `CoaTree`/`CoaTreeGroup` (atau reuse `CoaTypeGroup` + field baru) dan method `GetTree(ctx, userID) (*CoaTree, error)` di `service.go`: `FindByUserID` → `buildTree` → `groupByType`. `GetSummary` dilangsingkan: hanya 3 count (tanpa `FindByUserID`/tree).
+1. **[Backend]** Tambah DTO `AccountTree` (reuse `AccountTypeGroup` + field baru) dan method `GetTree(ctx, userID) (*AccountTree, error)` di `service.go`: `FindByUserID` → `buildTree` → `groupByType`. `GetSummary` dilangsingkan: hanya 3 count (tanpa `FindByUserID`/tree).
 2. **[Backend]** Tambah handler `GetTree` + route `r.Get("/tree", h.GetTree)` di `handler.go`. Migrasi aman: **tambah `/tree` dulu, pindahkan frontend, baru langsingkan `/summary`** (kontrak `summary` yang lama memuat `groups`; frontend lama pecah jika dilangsingkan duluan).
 3. **[Frontend]** Tambah `getTree()` di `services/account.ts` (via `authHttpClient` + `createLogger("account.service")`), tambah query key `accounts.tree` di `lib/query-keys.ts`. `AccountTopbar` tetap di `accounts.summary`, `AccountList` pindah ke `accounts.tree`. Invalidasi silang summary↔tree setelah create/update.
 
@@ -126,7 +127,7 @@ Scope yang disetujui: F1 (pemecahan API tree terpisah, tahap pertama), F2 (`post
 
 | File | Perubahan |
 |------|-----------|
-| `api/internal/module/account/dto.go` | Tambah DTO tree (`CoaTree` + `postingCount` per grup) |
+| `api/internal/module/account/dto.go` | Tambah DTO tree (`AccountTree` + `postingCount` per grup) |
 | `api/internal/module/account/service.go` | Tambah `GetTree()`, langsingkan `GetSummary()`, tambah `postingCount` di `groupByType` |
 | `api/internal/module/account/handler.go` | Tambah `GetTree` + route `GET /tree` |
 | `api/internal/module/account/service_test.go` | Test `GetTree`/`groupByType` (postingCount, urutan, grup kosong di-skip) |
@@ -232,7 +233,7 @@ Implikasi: `type`/`level` tidak diinput (diturunkan dari `code`); UI cukup minta
 ```go
 // Saat ini
 type Service interface {
-    GetSummary(ctx context.Context, userID int64) (*CoaSummary, error)
+    GetSummary(ctx context.Context, userID int64) (*AccountSummary, error)
     Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error)
     Update(ctx context.Context, userID int64, accountID int64, req UpdateAccountRequest) (*AccountResponse, error)
     Delete(ctx context.Context, userID int64, accountID int64) error
@@ -241,8 +242,8 @@ type Service interface {
 
 // Usulan (F1+F2)
 type Service interface {
-    GetSummary(ctx context.Context, userID int64) (*CoaSummary, error) // hanya counts
-    GetTree(ctx context.Context, userID int64) (*CoaTree, error)       // BARU
+    GetSummary(ctx context.Context, userID int64) (*AccountSummary, error) // hanya counts
+    GetTree(ctx context.Context, userID int64) (*AccountTree, error)       // BARU
     Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error)
     Update(ctx context.Context, userID int64, accountID int64, req UpdateAccountRequest) (*AccountResponse, error)
     Delete(ctx context.Context, userID int64, accountID int64) error
@@ -258,5 +259,5 @@ type Service interface {
 - **HTTP**: semua panggilan via `authHttpClient()` dari `@/lib/http-client` (jangan raw `fetch`).
 - **Logger**: `createLogger("account.*")` di setiap service/komponen/sheet baru; backend `logger.FromContext(ctx)`.
 - **i18n**: semua string baru wajib ada di `id.json` + `en.json` (tidak ada hardcode).
-- **Timezone**: N/A — COA tidak punya field tanggal.
+- **Timezone**: N/A — akun tidak punya field tanggal.
 - **Eksekusi bertahap**: setiap tahap (1/2/3) dipresentasikan file-by-file dan menunggu persetujuan sebelum eksekusi, sesuai aturan konfirmasi wajib.

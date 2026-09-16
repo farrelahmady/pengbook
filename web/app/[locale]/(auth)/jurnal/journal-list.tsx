@@ -38,7 +38,7 @@ export default function JournalList({
 }: JournalListProps) {
 	const t = useTranslations("journalPage");
 	const [showDatePicker, setShowDatePicker] = useState(false);
-	const [showCoaPicker, setShowCoaPicker] = useState(false);
+	const [showAccountPicker, setShowAccountPicker] = useState(false);
 
 	const { data: postingAccounts = [], isLoading: isLoadingAccounts } = useQuery(
 		{
@@ -48,9 +48,9 @@ export default function JournalList({
 	);
 
 	const hasCustomDate = dateFrom || dateTo;
-	const hasCoaFilter = selectedAccountIds.length > 0;
+	const hasAccountFilter = selectedAccountIds.length > 0;
 
-	const hasActiveFilters = hasCustomDate || hasCoaFilter;
+	const hasActiveFilters = hasCustomDate || hasAccountFilter;
 
 	return (
 		<>
@@ -75,7 +75,7 @@ export default function JournalList({
 				<button
 					onClick={() => {
 						setShowDatePicker(!showDatePicker);
-						setShowCoaPicker(false);
+						setShowAccountPicker(false);
 					}}
 					className={[
 						"shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-semibold border transition-all no-tap",
@@ -88,21 +88,21 @@ export default function JournalList({
 					{t("filter.dateRange")}
 				</button>
 
-				{/* COA filter button */}
+				{/* Account filter button */}
 				<button
 					onClick={() => {
-						setShowCoaPicker(!showCoaPicker);
+						setShowAccountPicker(!showAccountPicker);
 						setShowDatePicker(false);
 					}}
 					className={[
 						"shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-semibold border transition-all no-tap",
-						hasCoaFilter
+						hasAccountFilter
 							? "bg-primary-500 text-white border-primary-500"
 							: "bg-white text-secondary-500 border-secondary-200 hover:border-primary-300",
 					].join(" ")}
 				>
-					{t("filter.coa")}
-					{hasCoaFilter && (
+					{t("filter.account")}
+					{hasAccountFilter && (
 						<span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
 							{selectedAccountIds.length}
 						</span>
@@ -157,8 +157,8 @@ export default function JournalList({
 				</div>
 			)}
 
-			{/* ── COA multi-select ── */}
-			{showCoaPicker && (
+			{/* ── Account multi-select ── */}
+			{showAccountPicker && (
 				<div className="px-4 pb-3">
 					<div className="card-default shadow-card p-3 max-h-60 overflow-y-auto">
 						<p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 mb-2">
