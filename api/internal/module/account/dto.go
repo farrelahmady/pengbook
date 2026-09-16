@@ -27,26 +27,29 @@ type AccountResponse struct {
 }
 
 // AccountWithChildren is a recursive tree structure for COA hierarchy.
+// Children uses pointers so buildTree links nodes instead of copying
+// value snapshots (copying loses children attached later). JSON output
+// is unchanged: an array of objects.
 type AccountWithChildren struct {
-	ID        int64                  `json:"id"`
-	Code      string                 `json:"code"`
-	Name      string                 `json:"name"`
-	Type      string                 `json:"type"`
-	Level     int8                   `json:"level"`
-	IsPosting bool                   `json:"isPosting"`
-	ParentID  *int64                 `json:"parentId"`
-	CreatedAt string                 `json:"createdAt"`
-	UpdatedAt string                 `json:"updatedAt"`
-	Children  []AccountWithChildren  `json:"children"`
+	ID        int64                   `json:"id"`
+	Code      string                  `json:"code"`
+	Name      string                  `json:"name"`
+	Type      string                  `json:"type"`
+	Level     int8                    `json:"level"`
+	IsPosting bool                    `json:"isPosting"`
+	ParentID  *int64                  `json:"parentId"`
+	CreatedAt string                  `json:"createdAt"`
+	UpdatedAt string                  `json:"updatedAt"`
+	Children  []*AccountWithChildren  `json:"children"`
 }
 
 // CoaTypeGroup groups accounts by type for the COA page.
 type CoaTypeGroup struct {
-	Type     string                `json:"type"`
-	Label    string                `json:"label"`
-	Icon     string                `json:"icon"`
-	Accounts []AccountWithChildren `json:"accounts"`
-	Count    int                   `json:"count"`
+	Type     string                 `json:"type"`
+	Label    string                 `json:"label"`
+	Icon     string                 `json:"icon"`
+	Accounts []*AccountWithChildren `json:"accounts"`
+	Count    int                    `json:"count"`
 }
 
 // CoaSummary is the summary response for the COA page.

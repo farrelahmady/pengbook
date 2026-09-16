@@ -227,13 +227,15 @@ func toResponse(a *Account) *AccountResponse {
 }
 
 // buildTree builds a hierarchical tree from a flat list of accounts.
-func buildTree(accounts []Account) []AccountWithChildren {
-	accountMap := make(map[int64]*AccountWithChildren)
-	var roots []AccountWithChildren
+// Nodes are linked by pointer so children attached later are visible
+// through parents/roots already collected, regardless of input order.
+func buildTree(accounts []Account) []*AccountWithChildren {
+	accountMap := make(map[int64]*AccountWithChildren, len(accounts))
+	var roots []*AccountWithChildren
 
 	// First pass: create all nodes
 	for _, a := range accounts {
-		node := AccountWithChildren{
+		node := &AccountWithChildren{
 			ID:        a.ID,
 			Code:      a.Code,
 			Name:      a.Name,
@@ -243,22 +245,22 @@ func buildTree(accounts []Account) []AccountWithChildren {
 			ParentID:  a.ParentID,
 			CreatedAt: a.CreatedAt.Format(time.RFC3339),
 			UpdatedAt: a.UpdatedAt.Format(time.RFC3339),
-			Children:  []AccountWithChildren{},
+			Children:  []*AccountWithChildren{},
 		}
-		accountMap[a.ID] = &node
+		accountMap[a.ID] = node
 	}
 
-	// Second pass: build tree
+	// Second pass: link nodes (no value copies)
 	for _, a := range accounts {
 		node := accountMap[a.ID]
 		if a.ParentID != nil {
 			if parent, ok := accountMap[*a.ParentID]; ok {
-				parent.Children = append(parent.Children, *node)
+				parent.Children = append(parent.Children, node)
 			} else {
-				roots = append(roots, *node)
+				roots = append(roots, node)
 			}
 		} else {
-			roots = append(roots, *node)
+			roots = append(roots, node)
 		}
 	}
 
@@ -266,7 +268,7 @@ func buildTree(accounts []Account) []AccountWithChildren {
 }
 
 // groupByType groups accounts by their type for the COA page.
-func groupByType(roots []AccountWithChildren) []CoaTypeGroup {
+func groupByType(roots []*AccountWithChildren) []CoaTypeGroup {
 	typeOrder := []string{"ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE", "OTHER"}
 	typeLabels := map[string]string{
 		"ASSET":     "Aset",
@@ -291,13 +293,13 @@ func groupByType(roots []AccountWithChildren) []CoaTypeGroup {
 			Type:     t,
 			Label:    typeLabels[t],
 			Icon:     typeIcons[t],
-			Accounts: []AccountWithChildren{},
+			Accounts: []*AccountWithChildren{},
 			Count:    0,
 		}
 	}
 
-	var countType func(nodes []AccountWithChildren) int
-	countType = func(nodes []AccountWithChildren) int {
+	var countType func(nodes []*AccountWithChildren) int
+	countType = func(nodes []*AccountWithChildren) int {
 		count := 0
 		for _, n := range nodes {
 			count++
