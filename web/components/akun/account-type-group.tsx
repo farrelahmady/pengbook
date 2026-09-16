@@ -3,6 +3,7 @@
 import { AccountTypeGroup, AccountWithChildren } from "@/types";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
 	Wallet,
 	CreditCard,
@@ -33,11 +34,13 @@ const typeColorMap: Record<string, string> = {
 
 interface AccountTypeGroupCardProps {
 	group: AccountTypeGroup;
-	forceExpanded?: boolean;
+	expanded: boolean;
+	onToggle: () => void;
 	query?: string;
 }
 
 function AccountTree({ accounts, depth = 0, onEdit, query = "" }: { accounts: AccountWithChildren[]; depth?: number; onEdit: (acc: AccountWithChildren) => void; query?: string }) {
+	const t = useTranslations("accountPage");
 	return (
 		<>
 			{accounts.map((acc) => (
@@ -70,11 +73,11 @@ function AccountTree({ accounts, depth = 0, onEdit, query = "" }: { accounts: Ac
 						<div className="shrink-0 flex items-center gap-1">
 							{acc.isPosting ? (
 								<span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-success-50 text-success-700">
-									Posting
+									{t("badge.posting")}
 								</span>
 							) : (
 								<span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-secondary-100 text-secondary-500">
-									Header
+									{t("badge.header")}
 								</span>
 							)}
 							<button
@@ -96,20 +99,21 @@ function AccountTree({ accounts, depth = 0, onEdit, query = "" }: { accounts: Ac
 	);
 }
 
-export function AccountTypeGroupCard({ group, forceExpanded = false, query = "" }: AccountTypeGroupCardProps) {
-	const [expanded, setExpanded] = useState(false);
+export function AccountTypeGroupCard({ group, expanded, onToggle, query = "" }: AccountTypeGroupCardProps) {
+	const t = useTranslations("accountPage");
 	const [selectedAccount, setSelectedAccount] =
 		useState<AccountWithChildren | null>(null);
 	const Icon = iconMap[group.icon] ?? Wallet;
-	// TODO(F7): replace forceExpanded with fully controlled expanded state
-	const effectiveExpanded = forceExpanded || expanded;
+	const contentId = `account-group-${group.type}`;
 
 	return (
 		<>
 			<div className="card-default shadow-card overflow-hidden">
 			{/* Header */}
 			<button
-				onClick={() => setExpanded(!expanded)}
+				onClick={onToggle}
+				aria-expanded={expanded}
+				aria-controls={contentId}
 				className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-secondary-50 transition-colors"
 			>
 				<div
@@ -125,23 +129,21 @@ export function AccountTypeGroupCard({ group, forceExpanded = false, query = "" 
 						{group.label}
 					</p>
 					<p className="text-[11px] text-secondary-400">
-						{group.count} akun · {group.postingCount} posting
+						{t("groupSubtitle", { count: group.count, postingCount: group.postingCount })}
 					</p>
 				</div>
-				{!forceExpanded && (
-					<ChevronUp
-						size={16}
-						className={cn(
-							"text-secondary-400 transition-transform duration-200 shrink-0",
-							effectiveExpanded ? "" : "rotate-180",
-						)}
-					/>
-				)}
+				<ChevronUp
+					size={16}
+					className={cn(
+						"text-secondary-400 transition-transform duration-200 shrink-0",
+						expanded ? "" : "rotate-180",
+					)}
+				/>
 			</button>
 
 			{/* Accounts tree */}
-			{effectiveExpanded && (
-				<div className="border-t border-black/[0.06]">
+			{expanded && (
+				<div id={contentId} className="border-t border-black/[0.06]">
 					<AccountTree accounts={group.accounts} onEdit={setSelectedAccount} query={query} />
 				</div>
 			)}

@@ -220,6 +220,18 @@
 		},
 		"emptyTitle": "No accounts yet",
 		"emptyDescription": "Add accounts to start recording transactions.",
+		"error": {
+			"title": "Failed to load accounts",
+			"description": "Check your connection and try again.",
+			"retry": "Retry"
+		},
+		"badge": {
+			"posting": "Posting",
+			"header": "Header"
+		},
+		"groupSubtitle": "{count} accounts · {postingCount} posting",
+		"expandAll": "Expand all",
+		"collapseAll": "Collapse all",
 		"search": {
 			"placeholder": "Search account code or name...",
 			"resultCount": "{count} result(s) for '{query}'",

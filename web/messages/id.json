@@ -220,6 +220,18 @@
 		},
 		"emptyTitle": "Belum ada akun",
 		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi.",
+		"error": {
+			"title": "Gagal memuat akun",
+			"description": "Periksa koneksi Anda lalu coba lagi.",
+			"retry": "Coba lagi"
+		},
+		"badge": {
+			"posting": "Posting",
+			"header": "Header"
+		},
+		"groupSubtitle": "{count} akun · {postingCount} posting",
+		"expandAll": "Buka semua",
+		"collapseAll": "Tutup semua",
 		"search": {
 			"placeholder": "Cari kode atau nama akun...",
 			"resultCount": "{count} hasil untuk '{query}'",

@@ -1,7 +1,7 @@
 # Review Fitur Akun (Chart of Accounts)
 
 **Tanggal**: 16 September 2026
-**Status**: Tahap 2 (F1–F5) Selesai — `GET /tree`, `postingCount`, create akun + codegen, rename Coa→Account, edit rename-only, search tree frontend
+**Status**: Tahap 2 (F1–F8) Selesai — `GET /tree`, `postingCount`, create akun + codegen, rename Coa→Account, edit rename-only, search tree frontend, error state + retry, controlled expand/collapse + aria, i18n badge/subtitle
 **Dokumen Terkait**: [Review Fitur Jurnal](./REVIEW_FITUR_JURNAL.md), [Architecture Issues](../issues/ARCHITECTURE_ISSUES_2026-09-11.md)
 
 ---

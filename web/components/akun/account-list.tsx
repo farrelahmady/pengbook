@@ -7,7 +7,7 @@ import { useState } from "react";
 import { AccountTypeGroupCard } from "./account-type-group";
 import { AccountTypeGroupSkeleton } from "./account-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
-import { BookOpen, Search, SearchX, X } from "lucide-react";
+import { BookOpen, Search, SearchX, TriangleAlert, X } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 import { createLogger } from "@/lib/logger";
 import { filterAccountTree } from "./account-search";
@@ -17,7 +17,8 @@ const logger = createLogger("account.list");
 export default function AccountList() {
 	const t = useTranslations("accountPage");
 	const [query, setQuery] = useState("");
-	const { data, isLoading } = useQuery({
+	const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+	const { data, isLoading, isError, refetch } = useQuery({
 		queryKey: queryKeys.accounts.tree,
 		queryFn: () => accountService.getTree(),
 	});
@@ -35,6 +36,33 @@ export default function AccountList() {
 		(sum, g) => sum + g.matchCount,
 		0,
 	);
+
+	function toggleGroup(type: string) {
+		setExpandedGroups((prev) => {
+			const next = new Set(prev);
+			if (next.has(type)) {
+				next.delete(type);
+			} else {
+				next.add(type);
+			}
+			logger.debug("Account group toggled", { type, expanded: next.has(type) });
+			return next;
+		});
+	}
+
+	const visibleGroups = searching
+		? filteredGroups.filter((g) => g.accounts.length > 0)
+		: filteredGroups;
+
+	function expandAll() {
+		setExpandedGroups(new Set(visibleGroups.map((g) => g.type)));
+		logger.debug("Account groups expanded all");
+	}
+
+	function collapseAll() {
+		setExpandedGroups(new Set());
+		logger.debug("Account groups collapsed all");
+	}
 
 	return (
 		<div className="px-1">
@@ -75,6 +103,26 @@ export default function AccountList() {
 				)}
 			</div>
 
+			{!searching && !isLoading && !isError && data && data.groups.length > 0 && (
+				<div className="flex justify-end px-4 pb-1">
+					<button
+						type="button"
+						onClick={expandAll}
+						className="text-[12px] font-semibold text-primary-500 no-tap"
+					>
+						{t("expandAll")}
+					</button>
+					<span className="text-[12px] text-secondary-300 mx-1.5">·</span>
+					<button
+						type="button"
+						onClick={collapseAll}
+						className="text-[12px] font-semibold text-primary-500 no-tap"
+					>
+						{t("collapseAll")}
+					</button>
+				</div>
+			)}
+
 			<div className="flex flex-col gap-2 px-3 pb-4">
 				{isLoading && (
 					<>
@@ -84,7 +132,28 @@ export default function AccountList() {
 					</>
 				)}
 
-				{!isLoading && (!data || data.groups.length === 0) && !searching && (
+				{!isLoading && isError && (
+					<div className="card-default shadow-card flex flex-col items-center justify-center py-12 px-8 text-center">
+						<div className="w-14 h-14 rounded-2xl bg-danger-50 flex items-center justify-center mb-4">
+							<TriangleAlert size={24} className="text-danger-600" strokeWidth={1.5} />
+						</div>
+						<p className="text-[14px] font-semibold text-secondary-700 mb-1">
+							{t("error.title")}
+						</p>
+						<p className="text-[12px] text-secondary-400 leading-relaxed">
+							{t("error.description")}
+						</p>
+						<button
+							type="button"
+							onClick={() => refetch()}
+							className="mt-4 px-4 py-2 rounded-xl bg-primary-500 text-white text-[13px] font-semibold active:scale-95 transition-all no-tap"
+						>
+							{t("error.retry")}
+						</button>
+					</div>
+				)}
+
+				{!isLoading && !isError && (!data || data.groups.length === 0) && !searching && (
 					<EmptyState
 						icon={BookOpen}
 						title={t("emptyTitle")}
@@ -92,7 +161,7 @@ export default function AccountList() {
 					/>
 				)}
 
-				{!isLoading && data && searching && totalMatches === 0 && (
+				{!isLoading && !isError && data && searching && totalMatches === 0 && (
 					<EmptyState
 						icon={SearchX}
 						title={t("search.emptyTitle")}
@@ -100,13 +169,14 @@ export default function AccountList() {
 					/>
 				)}
 
-				{!isLoading && data && (!searching || totalMatches > 0) && (
+				{!isLoading && !isError && data && (!searching || totalMatches > 0) && (
 					<>
-						{(searching ? filteredGroups.filter((g) => g.accounts.length > 0) : filteredGroups).map((group) => (
+						{visibleGroups.map((group) => (
 							<AccountTypeGroupCard
 								key={group.type}
 								group={group}
-								forceExpanded={searching}
+								expanded={searching ? true : expandedGroups.has(group.type)}
+								onToggle={() => toggleGroup(group.type)}
 								query={query}
 							/>
 						))}
