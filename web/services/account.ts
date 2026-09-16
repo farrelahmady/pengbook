@@ -119,4 +119,18 @@ export const accountService = {
 		logger.info("Account updated", { id, code: res.data.data.code });
 		return res.data.data;
 	},
+
+	/**
+	 * Download the chart of accounts as an Excel file.
+	 * Real API call to GET /api/v1/accounts/export
+	 */
+	exportExcel: async (): Promise<Blob> => {
+		logger.debug("Downloading account export");
+		const client = authHttpClient();
+		const res = await client.get(`${API_BASE}/accounts/export`, {
+			responseType: "blob",
+		});
+		logger.info("Account export downloaded");
+		return res.data as Blob;
+	},
 };
