@@ -1,10 +1,16 @@
 package account
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
 
 	"pengbook/api/internal/middleware"
 	"pengbook/api/pkg/response"
+	"pengbook/api/pkg/validator"
 )
 
 // GetAssetSummary handles GET /api/v1/accounts/assets/summary
@@ -39,4 +45,88 @@ func (h *Handler) GetAssetGroups(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, groups)
+}
+
+// CreateAsset handles POST /api/v1/accounts/assets
+func (h *Handler) CreateAsset(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req CreateAssetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := validator.Struct(req); err != nil {
+		response.ValidationError(w, err)
+		return
+	}
+
+	created, err := h.service.CreateAsset(r.Context(), userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrParentNotFound):
+			response.Error(w, http.StatusNotFound, err.Error())
+			return
+		case errors.Is(err, ErrParentNotAsset), errors.Is(err, ErrParentNotLevel2):
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		case errors.Is(err, ErrCodeExists):
+			response.Error(w, http.StatusConflict, err.Error())
+			return
+		case errors.Is(err, ErrCodeExhausted):
+			response.Error(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "failed to create asset")
+		return
+	}
+
+	response.Success(w, http.StatusCreated, created)
+}
+
+// AdjustAssetBalance handles POST /api/v1/accounts/assets/{id}/adjust-balance
+func (h *Handler) AdjustAssetBalance(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	assetID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid asset id")
+		return
+	}
+
+	var req AdjustBalanceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := validator.Struct(req); err != nil {
+		response.ValidationError(w, err)
+		return
+	}
+
+	result, err := h.service.AdjustAssetBalance(r.Context(), userID, assetID, req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "asset not found")
+			return
+		}
+		if errors.Is(err, ErrAssetNotPosting) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "failed to adjust asset balance")
+		return
+	}
+
+	response.Success(w, http.StatusCreated, result)
 }

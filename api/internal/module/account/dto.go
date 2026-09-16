@@ -34,16 +34,16 @@ type AccountResponse struct {
 // value snapshots (copying loses children attached later). JSON output
 // is unchanged: an array of objects.
 type AccountWithChildren struct {
-	ID        int64                   `json:"id"`
-	Code      string                  `json:"code"`
-	Name      string                  `json:"name"`
-	Type      string                  `json:"type"`
-	Level     int8                    `json:"level"`
-	IsPosting bool                    `json:"isPosting"`
-	ParentID  *int64                  `json:"parentId"`
-	CreatedAt string                  `json:"createdAt"`
-	UpdatedAt string                  `json:"updatedAt"`
-	Children  []*AccountWithChildren  `json:"children"`
+	ID        int64                  `json:"id"`
+	Code      string                 `json:"code"`
+	Name      string                 `json:"name"`
+	Type      string                 `json:"type"`
+	Level     int8                   `json:"level"`
+	IsPosting bool                   `json:"isPosting"`
+	ParentID  *int64                 `json:"parentId"`
+	CreatedAt string                 `json:"createdAt"`
+	UpdatedAt string                 `json:"updatedAt"`
+	Children  []*AccountWithChildren `json:"children"`
 }
 
 // AccountTypeGroup groups accounts by type for the Account page.
@@ -83,4 +83,9 @@ type ParentListItem struct {
 	Name  string `json:"name"`
 	Type  string `json:"type"`
 	Level int8   `json:"level"`
+}
+
+type ParentsRequest struct {
+	Level int8   `json:"level"`
+	Type  string `json:"type"`
 }

@@ -42,7 +42,7 @@ func setup(t *testing.T) *testContext {
 
 	txMgr := postgres.NewTxManager(pool)
 	userSvc := user.NewService(userRepo, txMgr)
-	accSvc := account.NewService(accRepo, txMgr)
+	accSvc := account.NewService(accRepo, postgres.NewJournalMutatorAdapter(jnlRepo), txMgr)
 	jnlSvc := journal.NewService(jnlRepo, accRepo, txMgr)
 
 	return &testContext{

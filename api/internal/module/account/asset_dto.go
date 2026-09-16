@@ -33,3 +33,27 @@ type AssetSummary struct {
 type AssetGroups struct {
 	Groups []AssetGroup `json:"groups"`
 }
+
+// CreateAssetRequest is the DTO payload for POST /api/v1/accounts/assets.
+type CreateAssetRequest struct {
+	ParentID int64  `json:"parentId" validate:"required"`
+	Name     string `json:"name" validate:"required,max=200"`
+}
+
+// AdjustBalanceRequest is the DTO payload for POST /api/v1/accounts/assets/{id}/adjust-balance.
+// User provides the desired final balance; the server calculates the delta
+// and creates the appropriate journal entry:
+// - desiredBalance > currentBalance: Dr Asset / Cr Reclass (amount = delta)
+// - desiredBalance < currentBalance: Dr Reclass / Cr Asset (amount = delta)
+// - desiredBalance == currentBalance: no journal entry, return current balance
+type AdjustBalanceRequest struct {
+	Balance float64 `json:"balance" validate:"required,gte=0"`
+	Note    string `json:"note,omitempty"`
+	Date    string `json:"date,omitempty"` // RFC3339, optional (defaults to now)
+}
+
+// AdjustBalanceResponse is the DTO returned after a successful balance adjustment.
+type AdjustBalanceResponse struct {
+	JournalEntryID int64   `json:"journalEntryId"`
+	Balance        float64 `json:"balance"`
+}

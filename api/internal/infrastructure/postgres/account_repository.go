@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -264,15 +266,23 @@ func (r *accountRepository) FindPostingByUserID(ctx context.Context, userID int6
 	return accounts, rows.Err()
 }
 
-const findByLevelQuery = `
+func (r *accountRepository) FindByLevelAndType(ctx context.Context, userID int64, level int8, typeAccount string) ([]account.Account, error) {
+	where := []string{"user_id = $1", "level = $2"}
+	args := []interface{}{userID, level}
+
+	if typeAccount != "" {
+		where = append(where, "type = $3")
+		args = append(args, typeAccount)
+	}
+
+	query := fmt.Sprintf(`
 	SELECT id, user_id, code, name, type, level, parent_id, created_at, updated_at
 	FROM accounts
-	WHERE user_id = $1 AND level = $2
+	WHERE %s
 	ORDER BY code
-`
+`, strings.Join(where, " AND "))
 
-func (r *accountRepository) FindByLevel(ctx context.Context, userID int64, level int8) ([]account.Account, error) {
-	rows, err := r.db(ctx).Query(ctx, findByLevelQuery, userID, level)
+	rows, err := r.db(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

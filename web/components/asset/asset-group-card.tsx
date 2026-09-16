@@ -1,18 +1,33 @@
 "use client";
 
-import { AssetGroup } from "@/types";
+import { AssetGroup, AssetAccount } from "@/types";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
-import { ChevronUp } from "lucide-react";
+import { ChevronUp, MoreHorizontal, Pencil, TrendingUp } from "lucide-react";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface AssetGroupCardProps {
 	group: AssetGroup & { matchCount?: number };
 	expanded: boolean;
 	onToggle: () => void;
+	onAdjustBalance: (asset: AssetAccount) => void;
+	onRename: (asset: AssetAccount) => void;
 }
 
-export function AssetGroupCard({ group, expanded, onToggle }: AssetGroupCardProps) {
+export function AssetGroupCard({
+	group,
+	expanded,
+	onToggle,
+	onAdjustBalance,
+	onRename,
+}: AssetGroupCardProps) {
 	const t = useTranslations("assetPage");
 	const currencyFormat = useCurrencyFormatter();
 
@@ -74,22 +89,48 @@ export function AssetGroupCard({ group, expanded, onToggle }: AssetGroupCardProp
 										<p className="text-[13px] text-secondary-700">{account.name}</p>
 									</div>
 								</div>
-								<div className="text-right shrink-0">
-									<p
-										className={cn(
-											"font-mono text-[13px] font-medium",
-											account.balance >= 0
-												? "text-success-600"
-												: "text-danger-600",
+								<div className="flex items-center gap-3">
+									<div className="text-right shrink-0">
+										<p
+											className={cn(
+												"font-mono text-[13px] font-medium",
+												account.balance >= 0
+													? "text-success-600"
+													: "text-danger-600",
+											)}
+										>
+											{currencyFormat(account.balance, { compact: true, currency: "Rp" })}
+										</p>
+										{account.isPosting && (
+											<span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-success-50 text-success-700">
+												{t("badge.posting")}
+											</span>
 										)}
-									>
-										{currencyFormat(account.balance, { compact: true, currency: "Rp" })}
-									</p>
-									{account.isPosting && (
-										<span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-success-50 text-success-700">
-											{t("badge.posting")}
-										</span>
-									)}
+									</div>
+
+									{/* Option menu */}
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<button
+												type="button"
+												className="p-1.5 rounded-lg text-secondary-400 hover:text-secondary-600 hover:bg-secondary-100 active:scale-95 transition-all no-tap"
+												aria-label="Options"
+											>
+												<MoreHorizontal size={16} />
+											</button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent align="end" className="min-w-[140px]">
+											<DropdownMenuItem onClick={() => onRename(account)}>
+												<Pencil size={14} className="mr-2" />
+												{t("optionMenu.rename")}
+											</DropdownMenuItem>
+											<DropdownMenuSeparator />
+											<DropdownMenuItem onClick={() => onAdjustBalance(account)}>
+												<TrendingUp size={14} className="mr-2" />
+												{t("optionMenu.adjustBalance")}
+											</DropdownMenuItem>
+										</DropdownMenuContent>
+									</DropdownMenu>
 								</div>
 							</div>
 						))}

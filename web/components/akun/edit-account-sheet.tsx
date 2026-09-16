@@ -86,7 +86,10 @@ export function EditAccountSheet({
 
 						{/* Name */}
 						<div>
-							<label className={labelClass}>{t("name")}</label>
+							<label className={labelClass}>
+								{t("name")}
+								{name}
+							</label>
 							<input
 								type="text"
 								value={name}

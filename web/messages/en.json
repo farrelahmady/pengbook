@@ -168,7 +168,45 @@
 			"posting": "Posting"
 		},
 		"subtotalLabel": "Net debit subtotal",
-		"subtotalValue": "DR {value}"
+		"subtotalValue": "DR {value}",
+		"optionMenu": {
+			"rename": "Rename",
+			"adjustBalance": "Adjust Balance"
+		},
+		"create": {
+			"title": "Add Asset",
+			"parent": "Asset Group",
+			"parentPlaceholder": "Select group",
+			"name": "Account Name",
+			"namePlaceholder": "e.g. Bank Mandiri - Main",
+			"submit": "Save",
+			"hints": {
+				"autoCode": "Account code is auto-generated based on parent.",
+				"assetPosting": "Posting assets are used to record balances. Initial balance is Rp0 — fill via adjustment."
+			},
+			"toastLoading": "Creating asset...",
+			"toastSuccess": "Asset {code} created successfully",
+			"toastError": "Failed to create asset",
+			"toastValidation": "Please select a group and enter a name",
+			"fab": "Add Asset"
+		},
+		"adjustBalance": {
+			"title": "Adjust Balance",
+			"currentBalance": "Current Balance",
+			"desiredBalance": "Desired Balance",
+			"note": "Note",
+			"notePlaceholder": "e.g. Initial deposit",
+			"date": "Date",
+			"optional": "optional",
+			"submit": "Save",
+			"hints": {
+				"info": "Enter the desired final balance. The change will be recorded as a balancing journal entry against the Reclassification Adjustments account (6.01.01.01)."
+			},
+			"toastLoading": "Adjusting balance...",
+			"toastSuccess": "Balance adjusted to Rp{balance}",
+			"toastError": "Failed to adjust balance",
+			"toastValidation": "Desired balance must be 0 or greater"
+		}
 	},
 	"reportPage": {
 		"title": "Financial Reports",

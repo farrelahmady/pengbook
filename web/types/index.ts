@@ -180,6 +180,19 @@ export interface AssetGroups {
 	groups: AssetGroup[];
 }
 
+// Account response (mirror of Go AccountResponse)
+export interface AccountResponse {
+	id: number;
+	code: string;
+	name: string;
+	type: string;
+	level: number;
+	isPosting: boolean;
+	parentId: number | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
 // Report
 export interface TrialBalanceEntry {
 	code: string;

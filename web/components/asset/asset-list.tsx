@@ -1,7 +1,7 @@
 "use client";
 
 import { assetService } from "@/services/asset";
-import { AssetGroup } from "@/types";
+import { AssetGroup, AssetAccount } from "@/types";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
@@ -13,6 +13,11 @@ import { queryKeys } from "@/lib/query-keys";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("asset.list");
+
+interface AssetListProps {
+	onAdjustBalance: (asset: AssetAccount) => void;
+	onRename: (asset: AssetAccount) => void;
+}
 
 type AssetGroupWithMatch = AssetGroup & { matchCount: number };
 
@@ -36,7 +41,7 @@ function filterAssetGroups(
 		.filter((g) => g.matchCount > 0);
 }
 
-export default function AssetList() {
+export default function AssetList({ onAdjustBalance, onRename }: AssetListProps) {
 	const t = useTranslations("assetPage");
 	const [query, setQuery] = useState("");
 	const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
@@ -208,6 +213,8 @@ export default function AssetList() {
 							group={group}
 							expanded={searching ? true : expandedGroups.has(group.id)}
 							onToggle={() => toggleGroup(group.id)}
+							onAdjustBalance={onAdjustBalance}
+							onRename={onRename}
 						/>
 					))}
 				</div>

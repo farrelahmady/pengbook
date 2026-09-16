@@ -1,6 +1,11 @@
 import { authHttpClient } from "@/lib/http-client";
 import { createLogger } from "@/lib/logger";
-import { ApiResponse, AssetGroups, AssetSummary } from "@/types";
+import {
+	AccountResponse,
+	ApiResponse,
+	AssetGroups,
+	AssetSummary,
+} from "@/types";
 
 const logger = createLogger("asset.service");
 
@@ -12,6 +17,10 @@ const API_BASE = "/api/v1/accounts/assets";
  * Read endpoints nested di modul account (keputusan desain 16 Sep 2026):
  * - GET /api/v1/accounts/assets/summary (ringan, untuk Topbar)
  * - GET /api/v1/accounts/assets/groups (berat, untuk List)
+ *
+ * Mutation endpoints:
+ * - POST /api/v1/accounts/assets (create asset)
+ * - POST /api/v1/accounts/assets/{id}/adjust-balance (adjust balance)
  *
  * Uses authHttpClient for authenticated endpoints.
  */
@@ -45,6 +54,56 @@ export const assetService = {
 		);
 		logger.info("Asset groups fetched", {
 			groups: res.data.data.groups.length,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Create a new asset posting account.
+	 * POST /api/v1/accounts/assets
+	 */
+	create: async (parentId: number, name: string): Promise<AccountResponse> => {
+		logger.debug("Creating asset", { parentId, name });
+		const client = authHttpClient();
+		const res = await client.post<ApiResponse<AccountResponse>>(
+			`${API_BASE}`,
+			{ parentId, name },
+		);
+		logger.info("Asset created", {
+			id: res.data.data.id,
+			code: res.data.data.code,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Adjust the balance of an asset posting account to the desired balance.
+	 * Server calculates delta and creates balanced journal entry.
+	 * POST /api/v1/accounts/assets/{id}/adjust-balance
+	 */
+	adjustBalance: async (
+		assetId: number,
+		balance: number,
+		note?: string,
+		date?: string,
+	): Promise<{ journalEntryId: number; balance: number }> => {
+		logger.debug("Adjusting asset balance", {
+			assetId,
+			desiredBalance: balance,
+			note,
+		});
+		const client = authHttpClient();
+		const res = await client.post<
+			ApiResponse<{ journalEntryId: number; balance: number }>
+		>(`${API_BASE}/${assetId}/adjust-balance`, {
+			balance,
+			...(note && { note }),
+			...(date && { date }),
+		});
+		logger.info("Asset balance adjusted", {
+			assetId,
+			journalEntryId: res.data.data.journalEntryId,
+			newBalance: res.data.data.balance,
 		});
 		return res.data.data;
 	},

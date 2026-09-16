@@ -71,9 +71,12 @@ func main() {
 	userSvc := user.NewService(userRepo, txManager)
 	userHandler := user.NewHandler(userSvc)
 	
+	// Journal module (created first so it can be passed to account service)
+	journalRepo := postgres.NewJournalRepository(pool)
+
 	// Account module (built before auth: registration seeds account roots)
 	accountRepo := postgres.NewAccountRepository(pool)
-	accountSvc := account.NewService(accountRepo, txManager)
+	accountSvc := account.NewService(accountRepo, postgres.NewJournalMutatorAdapter(journalRepo), txManager)
 	accountHandler := account.NewHandler(accountSvc)
 
 	// Auth module
@@ -81,8 +84,7 @@ func main() {
 	authSvc := auth.NewService(userRepo, authTokenRepo, txManager, cfg.JWT.Secret, accountSvc)
 	authHandler := auth.NewHandler(authSvc)
 
-	// Journal module
-	journalRepo := postgres.NewJournalRepository(pool)
+	// Journal service (uses account repo for validation)
 	journalSvc := journal.NewService(journalRepo, accountRepo, txManager)
 	journalHandler := journal.NewHandler(journalSvc)
 

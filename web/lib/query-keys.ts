@@ -25,8 +25,7 @@ export const queryKeys = {
 			accountIds?: string[];
 		}) => ["journals", "scroll-view", filters] as const,
 		summary: ["journals", "summary"] as const,
-		summaryForMonth: (month: string) =>
-			["journals", "summary", month] as const,
+		summaryForMonth: (month: string) => ["journals", "summary", month] as const,
 	},
 
 	// ── Accounts (Chart of Accounts) ───────────────────────
@@ -36,6 +35,8 @@ export const queryKeys = {
 		summary: ["accounts", "summary"] as const,
 		tree: ["accounts", "tree"] as const,
 		parents: (level: number) => ["accounts", "parents", level] as const,
+		parentsWithType: (level: number, type: string) =>
+			["accounts", "parents", level, type] as const,
 		posting: ["accounts", "posting"] as const,
 	},
 
