@@ -32,15 +32,6 @@ interface AccountTypeGroupCardProps {
 	group: AccountTypeGroup;
 }
 
-function countPostingAccounts(accounts: AccountWithChildren[]): number {
-	let count = 0;
-	for (const acc of accounts) {
-		if (acc.isPosting) count++;
-		count += countPostingAccounts(acc.children);
-	}
-	return count;
-}
-
 function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[]; depth?: number }) {
 	return (
 		<>
@@ -95,7 +86,6 @@ function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[];
 export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 	const [expanded, setExpanded] = useState(false);
 	const Icon = iconMap[group.icon] ?? Wallet;
-	const postingCount = countPostingAccounts(group.accounts);
 
 	return (
 		<div className="card-default shadow-card overflow-hidden">
@@ -117,7 +107,7 @@ export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 						{group.label}
 					</p>
 					<p className="text-[11px] text-secondary-400">
-						{group.count} akun · {postingCount} posting
+						{group.count} akun · {group.postingCount} posting
 					</p>
 				</div>
 				<ChevronUp

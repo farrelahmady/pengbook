@@ -298,28 +298,34 @@ func groupByType(roots []*AccountWithChildren) []AccountTypeGroup {
 	groupMap := make(map[string]*AccountTypeGroup)
 	for _, t := range typeOrder {
 		groupMap[t] = &AccountTypeGroup{
-			Type:     t,
-			Label:    typeLabels[t],
-			Icon:     typeIcons[t],
-			Accounts: []*AccountWithChildren{},
-			Count:    0,
+			Type:         t,
+			Label:        typeLabels[t],
+			Icon:         typeIcons[t],
+			Accounts:     []*AccountWithChildren{},
+			Count:        0,
+			PostingCount: 0,
 		}
 	}
 
-	var countType func(nodes []*AccountWithChildren) int
-	countType = func(nodes []*AccountWithChildren) int {
-		count := 0
+	// countSubtree returns (total, posting) for a subtree in a single pass.
+	var countSubtree func(nodes []*AccountWithChildren) (total, posting int)
+	countSubtree = func(nodes []*AccountWithChildren) (total, posting int) {
 		for _, n := range nodes {
-			count++
-			count += countType(n.Children)
+			total++
+			if n.IsPosting {
+				posting++
+			}
+			childTotal, childPosting := countSubtree(n.Children)
+			total += childTotal
+			posting += childPosting
 		}
-		return count
+		return total, posting
 	}
 
 	for _, root := range roots {
 		if group, ok := groupMap[root.Type]; ok {
 			group.Accounts = append(group.Accounts, root)
-			group.Count = countType(group.Accounts)
+			group.Count, group.PostingCount = countSubtree(group.Accounts)
 		}
 	}
 

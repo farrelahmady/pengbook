@@ -239,6 +239,7 @@ export interface AccountTypeGroup {
 	icon: string;
 	accounts: AccountWithChildren[];
 	count: number;
+	postingCount: number;
 }
 
 export interface AccountSummary {

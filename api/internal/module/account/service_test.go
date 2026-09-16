@@ -85,4 +85,7 @@ func TestGroupByTypeCountsSubtree(t *testing.T) {
 	if groups[0].Count != 4 {
 		t.Fatalf("expected count 4, got %d", groups[0].Count)
 	}
+	if groups[0].PostingCount != 1 {
+		t.Fatalf("expected postingCount 1, got %d", groups[0].PostingCount)
+	}
 }

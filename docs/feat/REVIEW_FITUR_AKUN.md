@@ -1,7 +1,7 @@
 # Review Fitur Akun (Chart of Accounts)
 
 **Tanggal**: 16 September 2026
-**Status**: Tahap 1 (F1) Selesai — `GET /tree` terpisah, rename Coa→Account
+**Status**: Tahap 1 (F1, F2) Selesai — `GET /tree` terpisah, `postingCount` dari backend, rename Coa→Account
 **Dokumen Terkait**: [Review Fitur Jurnal](./REVIEW_FITUR_JURNAL.md), [Architecture Issues](../issues/ARCHITECTURE_ISSUES_2026-09-11.md)
 
 ---
@@ -20,6 +20,7 @@ Scope yang disetujui: F1 (pemecahan API tree terpisah, tahap pertama), F2 (`post
 |----------|--------|--------|
 | API Summary (counts saja) | ✅ Dilangsingkan 16 Sep 2026 | `api/internal/module/account/handler.go` (`GetSummary`) |
 | API Tree (groups + tree) | ✅ Baru 16 Sep 2026 | `api/internal/module/account/handler.go` (`GetTree`) |
+| `postingCount` per grup dari backend | ✅ Selesai 16 Sep 2026 | `api/.../account/service.go` (`groupByType`), `web/components/akun/account-type-group.tsx` |
 | API Posting Accounts | ✅ Berfungsi | `api/internal/module/account/handler.go` (`GetPostingAccounts`) |
 | API Create | ✅ Ada, validasi parent lemah | `api/internal/module/account/service.go` (`Create`) |
 | API Update | ✅ Ada, validasi parent lemah | `api/internal/module/account/service.go` (`Update`) |

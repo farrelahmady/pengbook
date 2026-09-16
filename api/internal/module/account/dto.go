@@ -45,11 +45,12 @@ type AccountWithChildren struct {
 
 // AccountTypeGroup groups accounts by type for the Account page.
 type AccountTypeGroup struct {
-	Type     string                 `json:"type"`
-	Label    string                 `json:"label"`
-	Icon     string                 `json:"icon"`
-	Accounts []*AccountWithChildren `json:"accounts"`
-	Count    int                    `json:"count"`
+	Type         string                 `json:"type"`
+	Label        string                 `json:"label"`
+	Icon         string                 `json:"icon"`
+	Accounts     []*AccountWithChildren `json:"accounts"`
+	Count        int                    `json:"count"`
+	PostingCount int                    `json:"postingCount"`
 }
 
 // AccountSummary is the lightweight summary response for the Account page.
