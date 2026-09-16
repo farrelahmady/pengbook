@@ -13,6 +13,7 @@ import {
 	Pencil,
 } from "lucide-react";
 import { EditAccountSheet } from "./edit-account-sheet";
+import { highlightMatch } from "./account-search";
 
 const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
 	wallet: Wallet,
@@ -32,9 +33,11 @@ const typeColorMap: Record<string, string> = {
 
 interface AccountTypeGroupCardProps {
 	group: AccountTypeGroup;
+	forceExpanded?: boolean;
+	query?: string;
 }
 
-function AccountTree({ accounts, depth = 0, onEdit }: { accounts: AccountWithChildren[]; depth?: number; onEdit: (acc: AccountWithChildren) => void }) {
+function AccountTree({ accounts, depth = 0, onEdit, query = "" }: { accounts: AccountWithChildren[]; depth?: number; onEdit: (acc: AccountWithChildren) => void; query?: string }) {
 	return (
 		<>
 			{accounts.map((acc) => (
@@ -51,7 +54,7 @@ function AccountTree({ accounts, depth = 0, onEdit }: { accounts: AccountWithChi
 								<div className="w-0.5 h-4 bg-secondary-200 rounded-full shrink-0" />
 							)}
 							<div>
-								<p className="font-mono text-[10px] text-secondary-400">{acc.code}</p>
+								<p className="font-mono text-[10px] text-secondary-400">{query ? highlightMatch(acc.code, query) : acc.code}</p>
 								<p
 									className={cn(
 										"text-[13px] leading-snug",
@@ -60,7 +63,7 @@ function AccountTree({ accounts, depth = 0, onEdit }: { accounts: AccountWithChi
 											: "text-secondary-600 font-semibold",
 									)}
 								>
-									{acc.name}
+									{query ? highlightMatch(acc.name, query) : acc.name}
 								</p>
 							</div>
 						</div>
@@ -85,7 +88,7 @@ function AccountTree({ accounts, depth = 0, onEdit }: { accounts: AccountWithChi
 						</div>
 					</div>
 					{acc.children.length > 0 && (
-						<AccountTree accounts={acc.children} depth={depth + 1} onEdit={onEdit} />
+						<AccountTree accounts={acc.children} depth={depth + 1} onEdit={onEdit} query={query} />
 					)}
 				</div>
 			))}
@@ -93,11 +96,13 @@ function AccountTree({ accounts, depth = 0, onEdit }: { accounts: AccountWithChi
 	);
 }
 
-export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
+export function AccountTypeGroupCard({ group, forceExpanded = false, query = "" }: AccountTypeGroupCardProps) {
 	const [expanded, setExpanded] = useState(false);
 	const [selectedAccount, setSelectedAccount] =
 		useState<AccountWithChildren | null>(null);
 	const Icon = iconMap[group.icon] ?? Wallet;
+	// TODO(F7): replace forceExpanded with fully controlled expanded state
+	const effectiveExpanded = forceExpanded || expanded;
 
 	return (
 		<>
@@ -123,19 +128,21 @@ export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 						{group.count} akun · {group.postingCount} posting
 					</p>
 				</div>
-				<ChevronUp
-					size={16}
-					className={cn(
-						"text-secondary-400 transition-transform duration-200 shrink-0",
-						expanded ? "" : "rotate-180",
-					)}
-				/>
+				{!forceExpanded && (
+					<ChevronUp
+						size={16}
+						className={cn(
+							"text-secondary-400 transition-transform duration-200 shrink-0",
+							effectiveExpanded ? "" : "rotate-180",
+						)}
+					/>
+				)}
 			</button>
 
 			{/* Accounts tree */}
-			{expanded && (
+			{effectiveExpanded && (
 				<div className="border-t border-black/[0.06]">
-					<AccountTree accounts={group.accounts} onEdit={setSelectedAccount} />
+					<AccountTree accounts={group.accounts} onEdit={setSelectedAccount} query={query} />
 				</div>
 			)}
 			</div>

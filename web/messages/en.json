@@ -220,6 +220,13 @@
 		},
 		"emptyTitle": "No accounts yet",
 		"emptyDescription": "Add accounts to start recording transactions.",
+		"search": {
+			"placeholder": "Search account code or name...",
+			"resultCount": "{count} result(s) for '{query}'",
+			"emptyTitle": "No matching accounts",
+			"emptyDescription": "Try another keyword or clear the search.",
+			"clear": "Clear"
+		},
 		"create": {
 			"title": "New Account",
 			"level": "Level",

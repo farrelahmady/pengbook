@@ -220,6 +220,13 @@
 		},
 		"emptyTitle": "Belum ada akun",
 		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi.",
+		"search": {
+			"placeholder": "Cari kode atau nama akun...",
+			"resultCount": "{count} hasil untuk '{query}'",
+			"emptyTitle": "Tidak ada akun yang cocok",
+			"emptyDescription": "Coba kata kunci lain atau hapus pencarian.",
+			"clear": "Hapus"
+		},
 		"create": {
 			"title": "Buat Akun",
 			"level": "Level",
