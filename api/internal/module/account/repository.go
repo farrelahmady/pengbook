@@ -61,4 +61,15 @@ type Repository interface {
 	// EnsureBalance creates the zero balance row for an Asset posting account.
 	// Idempotent: an existing row is left untouched.
 	EnsureBalance(ctx context.Context, accountID int64) error
+
+	// FindAssetWithBalances returns all ASSET accounts of the given user
+	// with their cached balance (COALESCE to 0 when the balance row is
+	// missing), ordered by code. Used by the Asset page (summary + groups).
+	FindAssetWithBalances(ctx context.Context, userID int64) ([]AssetBalanceRow, error)
+}
+
+// AssetBalanceRow is one ASSET account row joined with its cached balance.
+type AssetBalanceRow struct {
+	Account Account
+	Balance float64
 }

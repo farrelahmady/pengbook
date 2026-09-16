@@ -29,6 +29,8 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/tree", h.GetTree)
 	r.Get("/parents", h.GetParents)
 	r.Get("/posting", h.GetPostingAccounts)
+	r.Get("/assets/summary", h.GetAssetSummary)
+	r.Get("/assets/groups", h.GetAssetGroups)
 	r.Post("/", h.Create)
 	r.Put("/{id}", h.Update)
 	r.Delete("/{id}", h.Delete)

@@ -9,21 +9,26 @@ import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { assetService } from "@/services/asset";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { useEffect } from "react";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("asset.topbar");
 
 export default function AssetTopbar() {
 	const t = useTranslations("assetPage");
 	const format = useFormatter();
 	const currencyFormat = useCurrencyFormatter();
-	const { data, isLoading } = useQuery({
+	const { data, isLoading, isError } = useQuery({
 		queryKey: queryKeys.assets.summary,
 		queryFn: () => assetService.getSummary(),
 	});
 
-	const totalAccount = data?.groups.reduce(
-		(sum, g) => sum + g.accounts.length,
-		0,
-	) ?? 0;
+	useEffect(() => {
+		if (isError) {
+			logger.error("Failed to load asset summary");
+		}
+	}, [isError]);
 
 	const labelPeriod = format.dateTime(new Date(), {
 		month: "short",
@@ -43,6 +48,8 @@ export default function AssetTopbar() {
 						value={
 							isLoading ? (
 								<Skeleton className="w-16 h-3 rounded" />
+							) : isError ? (
+								"–"
 							) : (
 								currencyFormat(data?.totalAsset ?? 0, {
 									compact: true,
@@ -51,7 +58,9 @@ export default function AssetTopbar() {
 							)
 						}
 						sub={
-							isLoading ? undefined : `${totalAccount} ${t("summaryTotalAsset.sub")}`
+							isLoading || isError
+								? undefined
+								: `${data?.accountCount ?? 0} ${t("summaryTotalAsset.sub")}`
 						}
 					/>
 					<TopbarSummaryCard
@@ -59,6 +68,8 @@ export default function AssetTopbar() {
 						value={
 							isLoading ? (
 								<Skeleton className="w-16 h-3 rounded" />
+							) : isError ? (
+								"–"
 							) : (
 								currencyFormat(data?.currentAsset ?? 0, {
 									compact: true,
@@ -66,7 +77,7 @@ export default function AssetTopbar() {
 								})
 							)
 						}
-						sub={t("summaryCurrentAsset.sub")}
+						sub={isError ? undefined : t("summaryCurrentAsset.sub")}
 						accent
 					/>
 				</div>

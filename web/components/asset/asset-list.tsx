@@ -3,18 +3,28 @@
 import { assetService } from "@/services/asset";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import { useEffect } from "react";
 import { AssetGroupCard } from "./asset-group-card";
 import { AssetGroupCardSkeleton } from "./asset-group-card-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FolderOpen } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("asset.list");
 
 export default function AssetList() {
 	const t = useTranslations("assetPage");
-	const { data, isLoading } = useQuery({
-		queryKey: queryKeys.assets.summary,
-		queryFn: () => assetService.getSummary(),
+	const { data, isLoading, isError } = useQuery({
+		queryKey: queryKeys.assets.groups,
+		queryFn: () => assetService.getGroups(),
 	});
+
+	useEffect(() => {
+		if (isError) {
+			logger.error("Failed to load asset groups");
+		}
+	}, [isError]);
 
 	return (
 		<div className="px-1">

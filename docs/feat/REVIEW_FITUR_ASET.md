@@ -1,8 +1,8 @@
 # Review Fitur Aset
 
 **Tanggal**: 16 September 2026
-**Status**: Tahap 0 (preview dummy) Selesai — Topbar + List + GroupCard dirender dari `dummyAssetSummary`; belum ada API. Tahap 1–4 (backend + wiring + kualitas + mutasi) diusulkan di dokumen ini
-**Keputusan Desain (16 Sep 2026)**: (1) endpoint nested di modul `account` (`/api/v1/accounts/assets/...`, kode Go di file `asset_*` terpisah dalam package `account`); (2) `currentAsset` = subtree `1.01.00.00`; (3) grouping = akun level-2; (4) halaman bisa tambah aset (auto `accounts` + `account_balances`), rename, dan adjust-balance via jurnal lawan `6.01.01.01 Reclass Adjustments`
+**Status**: ✅ Tahap 0 (preview dummy) Selesai · ✅ Tahap 1 (backend read: GET /assets/summary + GET /assets/groups) Selesai · ✅ Tahap 2 (frontend wiring + hapus dummy) Selesai · ✅ A10 ikon Batal (dihapus total dari halaman Aset) · 🔄 Tahap 3 (kualitas: error/search/aria/i18n) Belum dimulai · 📋 Tahap 4 (mutasi: create + adjust-balance) Belum dimulai
+**Keputusan Desain (16 Sep 2026)**: (1) endpoint nested di modul `account` (`/api/v1/accounts/assets/...`, kode Go di file `asset_*` terpisah dalam package `account`); (2) `currentAsset` = subtree `1.01.00.00`; (3) grouping = akun level-2; (4) halaman bisa tambah aset (auto `accounts` + `account_balances`), rename, dan adjust-balance via jurnal lawan `6.01.01.01 Reclass Adjustments`; (5) ikon dihapus total dari halaman Aset (A10 batal)
 **Dokumen Terkait**: [Review Fitur Akun](./REVIEW_FITUR_AKUN.md), [Review Fitur Jurnal](./REVIEW_FITUR_JURNAL.md), [Architecture Issues](../issues/ARCHITECTURE_ISSUES_2026-09-11.md)
 
 ---
@@ -105,7 +105,7 @@ Scope yang disetujui: A1 (API summary + groups nested di `account`), A2 (kontrak
 | Issue | Deskripsi | File |
 |-------|-----------|------|
 | A9. Tanpa search / expand-all / aria | `AssetGroupCard:21` pakai `useState(true)` lokal default-expanded; tombol tanpa `aria-expanded/aria-controls`; tidak ada search maupun kontrol massal. Akun sudah punya `account-search.tsx`, `expandAll/collapseAll`, controlled `expandedGroups` | `web/components/asset/asset-group-card.tsx`, `asset-list.tsx` |
-| A10. `iconMap` rapuh | Hanya kenal `wallet/building/clock/package`; sisanya fallback `Wallet` diam-diam tanpa warn | `web/components/asset/asset-group-card.tsx:9-14` |
+| ~~A10. `iconMap` rapuh~~ | **BATAL (16 Sep 2026)**: ikon dihapus total dari halaman Aset — tidak ada kolom DB, tidak ada peta backend, tidak ada `iconMap` frontend. Grup level-2 dirender tanpa ikon | — |
 | A11. Currency hardcode | `currency: "Rp"` + `compact: true` tersebar di topbar + card | `web/components/asset/asset-topbar.tsx`, `asset-group-card.tsx` |
 | Skeleton hanya header | `AssetGroupCardSkeleton` tidak meniru baris sub-akun (bandingkan `AccountTypeGroupSkeleton`) | `web/components/asset/asset-group-card-skeleton.tsx` |
 
@@ -119,7 +119,7 @@ Scope yang disetujui: A1 (API summary + groups nested di `account`), A2 (kontrak
 1. **[Backend]** Tambah file dalam package `account` (tanpa modul baru, tanpa ubah `server/http.go`): `asset_dto.go` (`AssetSummary` ringan + `AssetGroups` berat), `asset_service.go` (`GetAssetSummary(ctx, userID)`, `GetAssetGroups(ctx, userID)`), `asset_handler.go` (`GetAssetSummary`, `GetAssetGroups`), `asset_repository.go` (interface `FindAssetWithBalances` + query join). Route di `handler.go Routes()`: `r.Get("/assets/summary", ...)` + `r.Get("/assets/groups", ...)` didaftarkan **sebelum** `r.Put("/{id}", ...)` (chi `/{id}` greedy). Service method ditambahkan ke interface `Service` existing.
 2. **[Backend]** Repository: satu query `accounts LEFT JOIN account_balances` filter `user_id + type = 'ASSET'`, `COALESCE(balance, 0)`, order by `code`. Agregat: `totalAsset = SUM` semua; `currentAsset = SUM` prefix `1.01.`; `totalBalance` per grup = `SUM` anggotanya; `accountCount` = count posting. Ikuti faktor tanda journal (`balanceSignFactor`: ASSET = `debit - credit`).
 3. **[Backend]** Test: `asset_service_test.go` (agregat, grup kosong di-skip, balance NULL → 0, isolasi antar user, `currentAsset` hanya prefix `1.01`).
-4. **[Backend]** Grouping = akun **level-2** seeder (Bank, Cash, E-Wallet, Brokerage, Bonds, Stocks, Mutual Funds, Saving and Comodities, Account Receiveable — diputuskan) sebagai `AssetGroup`; bukan 4 grup dummy. `icon` dikirim dari backend (peta `code → icon` di service, tiru `groupByType` Akun); code tak dikenal → fallback `wallet` + warn.
+4. **[Backend]** Grouping = akun **level-2** seeder (Bank, Cash, E-Wallet, Brokerage, Bonds, Stocks, Mutual Funds, Saving and Comodities, Account Receiveable — diputuskan) sebagai `AssetGroup`; bukan 4 grup dummy. Grup dirender **tanpa ikon** (keputusan 16 Sep 2026: A10 batal).
 
 **Keputusan yang sudah dibekukan:** nested di `account`; `currentAsset` = subtree `1.01.00.00`; `totalAsset` = seluruh ASSET; grup = level-2.
 
@@ -134,7 +134,7 @@ Scope yang disetujui: A1 (API summary + groups nested di `account`), A2 (kontrak
 8. **[Frontend — A6]** Error state: tangkap `isError` di List/Topbar, error card + `"Coba lagi"` (`refetch`); skeleton tetap untuk loading; Topbar error → `"–"`.
 9. **[Frontend — A9]** Search input (filter code/nama, auto-expand grup berisi hasil, count `"N hasil"`, tombol clear) + toolbar `"Buka semua / Tutup semua"` + controlled expanded (angkat dari lokal per-card) + `aria-expanded`/`aria-controls`. Filter tampilan boleh di frontend (bukan kalkulasi bisnis).
 10. **[Frontend — A8]** Pindahkan `"sub-akun"`, `"Posting"`, `"Subtotal debit bersih"`, `"DR "` ke `assetPage` di `id.json` + `en.json`; ganti hardcode dengan `useTranslations` (tiru `accountPage.badge/groupSubtitle`).
-11. **[Frontend — A10/A11]** `iconMap`: tambah `logger.warn` saat fallback + samakan key dengan backend; pusatkan default currency di `useCurrencyFormatter`; skeleton tambah 2–3 baris sub-akun.
+11. **[Frontend — A11]** Pusatkan default currency di `useCurrencyFormatter`; skeleton tambah 2–3 baris sub-akun. (A10 batal — tidak ada ikon.)
 
 ### Tahap 4: Mutasi dari Halaman Aset (A12)
 
@@ -176,7 +176,7 @@ Scope yang disetujui: A1 (API summary + groups nested di `account`), A2 (kontrak
 | File | Perubahan |
 |------|-----------|
 | `web/components/asset/asset-list.tsx` | Search state, expand-all state, error card + retry |
-| `web/components/asset/asset-group-card.tsx` | Controlled `expanded` + `aria-expanded`, string via i18n, warn icon fallback |
+| `web/components/asset/asset-group-card.tsx` | Controlled `expanded` + `aria-expanded`, string via i18n |
 | `web/components/asset/asset-group-card-skeleton.tsx` | Tambah baris skeleton sub-akun |
 | `web/messages/id.json`, `web/messages/en.json` | Key search, error, expand, badge, subtotal |
 
@@ -239,7 +239,7 @@ Kontrak JSON usulan:
 { "totalAsset": 132250000, "currentAsset": 105750000, "accountCount": 10 }
 
 // GET /api/v1/accounts/assets/groups (berat — untuk List)
-{ "groups": [{ "id": 1, "code": "1.01.01", "name": "Bank", "icon": "building",
+{ "groups": [{ "id": 1, "code": "1.01.01.00", "name": "Bank",
   "totalBalance": 101600000, "accounts": [
     { "id": 101, "code": "1.01.01.01", "name": "Mandiri - Main",
       "balance": 49100000, "isPosting": true } ] }] }

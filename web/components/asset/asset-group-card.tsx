@@ -4,14 +4,7 @@ import { AssetGroup } from "@/types";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { Wallet, Building2, Clock, Package, ChevronUp } from "lucide-react";
-
-const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-	wallet: Wallet,
-	building: Building2,
-	clock: Clock,
-	package: Package,
-};
+import { ChevronUp } from "lucide-react";
 
 interface AssetGroupCardProps {
 	group: AssetGroup;
@@ -20,7 +13,6 @@ interface AssetGroupCardProps {
 export function AssetGroupCard({ group }: AssetGroupCardProps) {
 	const [expanded, setExpanded] = useState(true);
 	const currencyFormat = useCurrencyFormatter();
-	const Icon = iconMap[group.icon] ?? Wallet;
 
 	return (
 		<div className="card-default shadow-card overflow-hidden">
@@ -29,9 +21,6 @@ export function AssetGroupCard({ group }: AssetGroupCardProps) {
 				onClick={() => setExpanded(!expanded)}
 				className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-secondary-50 transition-colors"
 			>
-				<div className="w-10 h-10 rounded-xl bg-secondary-100 flex items-center justify-center shrink-0">
-					<Icon size={20} className="text-secondary-500" />
-				</div>
 				<div className="flex-1 min-w-0">
 					<p className="font-mono text-[10px] text-secondary-400">{group.code}</p>
 					<p className="text-[14px] font-semibold text-secondary-900 leading-snug">

@@ -39,11 +39,12 @@ export const queryKeys = {
 		posting: ["accounts", "posting"] as const,
 	},
 
-	// ── Assets ──────────────────────────────────────────────
+	// ── Assets (nested di modul account: /api/v1/accounts/assets/...) ──
 
 	assets: {
 		all: ["assets"] as const,
 		summary: ["assets", "summary"] as const,
+		groups: ["assets", "groups"] as const,
 	},
 
 	// ── Reports ─────────────────────────────────────────────

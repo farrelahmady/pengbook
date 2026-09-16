@@ -54,6 +54,13 @@ type Service interface {
 
 	// GetPostingAccounts returns all posting accounts (level=3) for a user.
 	GetPostingAccounts(ctx context.Context, userID int64) ([]PostingAccountResponse, error)
+
+	// GetAssetSummary returns the lightweight Asset aggregates for a user.
+	GetAssetSummary(ctx context.Context, userID int64) (*AssetSummary, error)
+
+	// GetAssetGroups returns asset posting accounts grouped under their
+	// level-2 ancestor, with per-group totals.
+	GetAssetGroups(ctx context.Context, userID int64) (*AssetGroups, error)
 }
 
 type service struct {
