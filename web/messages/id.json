@@ -241,6 +241,16 @@
 			"toastSuccess": "Akun {code} berhasil dibuat",
 			"toastError": "Gagal membuat akun",
 			"toastValidation": "Lengkapi parent dan nama akun"
+		},
+		"edit": {
+			"title": "Ubah Akun",
+			"code": "Kode",
+			"name": "Nama Akun",
+			"submit": "Simpan",
+			"toastLoading": "Menyimpan perubahan...",
+			"toastSuccess": "Akun {code} diperbarui",
+			"toastError": "Gagal memperbarui akun",
+			"toastValidation": "Nama akun tidak boleh kosong"
 		}
 	},
 	"auth": {

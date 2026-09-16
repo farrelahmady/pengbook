@@ -241,6 +241,16 @@
 			"toastSuccess": "Account {code} created",
 			"toastError": "Failed to create account",
 			"toastValidation": "Complete the parent and account name"
+		},
+		"edit": {
+			"title": "Edit Account",
+			"code": "Code",
+			"name": "Account Name",
+			"submit": "Save",
+			"toastLoading": "Saving changes...",
+			"toastSuccess": "Account {code} updated",
+			"toastError": "Failed to update account",
+			"toastValidation": "Account name cannot be empty"
 		}
 	},
 	"auth": {

@@ -10,9 +10,10 @@ type CreateAccountRequest struct {
 }
 
 // UpdateAccountRequest is the DTO payload for PUT /accounts/{id}.
+// Rename-only: the code encodes the account position, so moving parents
+// is not allowed here (that would need subtree re-coding).
 type UpdateAccountRequest struct {
-	Name     string `json:"name" example:"Mandiri - Main" validate:"required,min=1,max=200"`
-	ParentID *int64 `json:"parentId,omitempty"`
+	Name string `json:"name" example:"Mandiri - Main" validate:"required,min=1,max=200"`
 }
 
 // AccountResponse is the account response DTO.

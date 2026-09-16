@@ -69,6 +69,10 @@ export interface CreateAccountDto {
 	parentId: number;
 }
 
+export interface UpdateAccountDto {
+	name: string;
+}
+
 export interface ParentListItem {
 	id: number;
 	code: string;

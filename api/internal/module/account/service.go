@@ -258,17 +258,16 @@ func (s *service) Update(ctx context.Context, userID int64, accountID int64, req
 		return nil, ErrNotFound
 	}
 
-	oldValues := JSONB{"name": existing.Name, "parent_id": existing.ParentID}
+	oldValues := JSONB{"name": existing.Name}
 
 	existing.Name = req.Name
-	existing.ParentID = req.ParentID
 
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		if err := s.repo.Update(ctx, existing); err != nil {
 			return err
 		}
 
-		newValues := JSONB{"name": existing.Name, "parent_id": existing.ParentID}
+		newValues := JSONB{"name": existing.Name}
 		return s.repo.InsertAuditLog(ctx, &AccountAuditLog{
 			UserID:    userID,
 			AccountID: &accountID,

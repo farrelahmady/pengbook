@@ -164,7 +164,7 @@ func (r *accountRepository) FindByUserID(ctx context.Context, userID int64) ([]a
 
 const updateAccountQuery = `
 	UPDATE accounts
-	SET name = $2, parent_id = $3, updated_at = NOW()
+	SET name = $2, updated_at = NOW()
 	WHERE id = $1
 	RETURNING updated_at
 `
@@ -172,7 +172,7 @@ const updateAccountQuery = `
 func (r *accountRepository) Update(ctx context.Context, a *account.Account) error {
 	log := logger.FromContext(ctx)
 	err := r.db(ctx).QueryRow(ctx, updateAccountQuery,
-		a.ID, a.Name, a.ParentID,
+		a.ID, a.Name,
 	).Scan(&a.UpdatedAt)
 	if err != nil {
 		log.Error("repo: failed to update account", "account_id", a.ID, "error", err)

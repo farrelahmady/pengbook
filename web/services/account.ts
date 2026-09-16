@@ -6,6 +6,7 @@ import {
 	AccountSummary,
 	AccountTree,
 	CreateAccountDto,
+	UpdateAccountDto,
 	ParentListItem,
 	PostingAccount,
 } from "@/types";
@@ -102,6 +103,20 @@ export const accountService = {
 		logger.info("Posting accounts fetched", {
 			count: res.data.data.length,
 		});
+		return res.data.data;
+	},
+
+	/**
+	 * Rename an account. Real API call to PUT /api/v1/accounts/{id}
+	 */
+	update: async (id: number, dto: UpdateAccountDto): Promise<Account> => {
+		logger.debug("Updating account", { id, name: dto.name });
+		const client = authHttpClient();
+		const res = await client.put<ApiResponse<Account>>(
+			`${API_BASE}/accounts/${id}`,
+			dto,
+		);
+		logger.info("Account updated", { id, code: res.data.data.code });
 		return res.data.data;
 	},
 };

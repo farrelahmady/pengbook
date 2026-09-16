@@ -10,7 +10,9 @@ import {
 	TrendingUp,
 	TrendingDown,
 	ChevronUp,
+	Pencil,
 } from "lucide-react";
+import { EditAccountSheet } from "./edit-account-sheet";
 
 const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
 	wallet: Wallet,
@@ -32,7 +34,7 @@ interface AccountTypeGroupCardProps {
 	group: AccountTypeGroup;
 }
 
-function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[]; depth?: number }) {
+function AccountTree({ accounts, depth = 0, onEdit }: { accounts: AccountWithChildren[]; depth?: number; onEdit: (acc: AccountWithChildren) => void }) {
 	return (
 		<>
 			{accounts.map((acc) => (
@@ -62,7 +64,7 @@ function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[];
 								</p>
 							</div>
 						</div>
-						<div className="shrink-0">
+						<div className="shrink-0 flex items-center gap-1">
 							{acc.isPosting ? (
 								<span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-success-50 text-success-700">
 									Posting
@@ -72,10 +74,18 @@ function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[];
 									Header
 								</span>
 							)}
+							<button
+								type="button"
+								onClick={() => onEdit(acc)}
+								aria-label={`Edit ${acc.code}`}
+								className="p-1.5 rounded-lg text-secondary-400 hover:text-secondary-600 hover:bg-secondary-100 active:scale-95 transition-all no-tap"
+							>
+								<Pencil size={13} />
+							</button>
 						</div>
 					</div>
 					{acc.children.length > 0 && (
-						<AccountTree accounts={acc.children} depth={depth + 1} />
+						<AccountTree accounts={acc.children} depth={depth + 1} onEdit={onEdit} />
 					)}
 				</div>
 			))}
@@ -85,10 +95,13 @@ function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[];
 
 export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 	const [expanded, setExpanded] = useState(false);
+	const [selectedAccount, setSelectedAccount] =
+		useState<AccountWithChildren | null>(null);
 	const Icon = iconMap[group.icon] ?? Wallet;
 
 	return (
-		<div className="card-default shadow-card overflow-hidden">
+		<>
+			<div className="card-default shadow-card overflow-hidden">
 			{/* Header */}
 			<button
 				onClick={() => setExpanded(!expanded)}
@@ -122,9 +135,18 @@ export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 			{/* Accounts tree */}
 			{expanded && (
 				<div className="border-t border-black/[0.06]">
-					<AccountTree accounts={group.accounts} />
+					<AccountTree accounts={group.accounts} onEdit={setSelectedAccount} />
 				</div>
 			)}
-		</div>
+			</div>
+			<EditAccountSheet
+				key={selectedAccount?.id ?? "closed"}
+				account={selectedAccount}
+				open={selectedAccount !== null}
+				onOpenChange={(v) => {
+					if (!v) setSelectedAccount(null);
+				}}
+			/>
+		</>
 	);
 }
