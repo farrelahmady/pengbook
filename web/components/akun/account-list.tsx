@@ -69,32 +69,34 @@ export default function AccountList() {
 			<p className="section-label">{t("sectionTitle")}</p>
 
 			<div className="px-3 pb-2">
-				<div className="relative">
-					<Search
-						size={16}
-						className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-400 pointer-events-none"
-					/>
-					<input
-						type="text"
-						value={query}
-						onChange={(e) => {
-							setQuery(e.target.value);
-							logger.debug("Account search", { query: e.target.value });
-						}}
-						placeholder={t("search.placeholder")}
-						aria-label={t("search.placeholder")}
-						className="w-full bg-secondary-50 border border-black/[0.06] rounded-xl pl-9 pr-9 py-2.5 text-[13px] text-secondary-800 placeholder:text-secondary-400 outline-none focus:border-primary-300 transition-colors"
-					/>
-					{query !== "" && (
-						<button
-							type="button"
-							onClick={() => setQuery("")}
-							aria-label={t("search.clear")}
-							className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-secondary-400 hover:text-secondary-600 hover:bg-secondary-100 active:scale-95 transition-all no-tap"
-						>
-							<X size={14} />
-						</button>
-					)}
+				<div className="flex items-center gap-2">
+					<div className="relative flex-1">
+						<Search
+							size={16}
+							className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-400 pointer-events-none"
+						/>
+						<input
+							type="text"
+							value={query}
+							onChange={(e) => {
+								setQuery(e.target.value);
+								logger.debug("Account search", { query: e.target.value });
+							}}
+							placeholder={t("search.placeholder")}
+							aria-label={t("search.placeholder")}
+							className="w-full bg-secondary-50 border border-black/[0.06] rounded-xl pl-9 pr-9 py-2.5 text-[13px] text-secondary-800 placeholder:text-secondary-400 outline-none focus:border-primary-300 transition-colors"
+						/>
+						{query !== "" && (
+							<button
+								type="button"
+								onClick={() => setQuery("")}
+								aria-label={t("search.clear")}
+								className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-secondary-400 hover:text-secondary-600 hover:bg-secondary-100 active:scale-95 transition-all no-tap"
+							>
+								<X size={14} />
+							</button>
+						)}
+					</div>
 				</div>
 				{searching && !isLoading && data && (
 					<p className="text-[11px] text-secondary-400 mt-1.5 px-1">

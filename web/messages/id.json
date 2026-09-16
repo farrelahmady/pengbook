@@ -239,6 +239,12 @@
 			"emptyDescription": "Coba kata kunci lain atau hapus pencarian.",
 			"clear": "Hapus"
 		},
+		"export": {
+			"button": "Download Daftar Akun",
+			"toastLoading": "Mendownload daftar akun...",
+			"toastSuccess": "Daftar akun berhasil didownload",
+			"toastError": "Gagal mendownload daftar akun"
+		},
 		"create": {
 			"title": "Buat Akun",
 			"level": "Level",

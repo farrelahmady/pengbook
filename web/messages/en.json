@@ -239,6 +239,12 @@
 			"emptyDescription": "Try another keyword or clear the search.",
 			"clear": "Clear"
 		},
+		"export": {
+			"button": "Download Chart of Accounts",
+			"toastLoading": "Downloading chart of accounts...",
+			"toastSuccess": "Chart of accounts downloaded successfully",
+			"toastError": "Failed to download chart of accounts"
+		},
 		"create": {
 			"title": "New Account",
 			"level": "Level",

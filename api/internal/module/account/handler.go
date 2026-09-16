@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -29,6 +30,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/tree", h.GetTree)
 	r.Get("/parents", h.GetParents)
 	r.Get("/posting", h.GetPostingAccounts)
+	r.Get("/export", h.ExportExcel)
 	r.Post("/", h.Create)
 	r.Put("/{id}", h.Update)
 	r.Delete("/{id}", h.Delete)
@@ -107,6 +109,32 @@ func (h *Handler) GetPostingAccounts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, accounts)
+}
+
+// ExportExcel handles GET /api/v1/accounts/export
+// Generates an Excel file of the user's accounts ordered by code.
+func (h *Handler) ExportExcel(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	export, err := h.service.ExportExcel(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to generate export")
+		return
+	}
+
+	// Filename date follows the client's timezone like the journal export.
+	filenameDate := time.Now().In(middleware.LocationFromContext(r.Context())).Format("2006-01-02")
+
+	// Set headers for Excel file download
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=akun-"+filenameDate+".xlsx")
+	w.Header().Set("Content-Length", strconv.Itoa(len(export)))
+
+	w.Write(export)
 }
 
 // Create handles POST /api/v1/accounts

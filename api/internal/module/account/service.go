@@ -54,6 +54,9 @@ type Service interface {
 
 	// GetPostingAccounts returns all posting accounts (level=3) for a user.
 	GetPostingAccounts(ctx context.Context, userID int64) ([]PostingAccountResponse, error)
+
+	// ExportExcel returns the user's accounts as an Excel file ordered by code.
+	ExportExcel(ctx context.Context, userID int64) ([]byte, error)
 }
 
 type service struct {
@@ -337,6 +340,25 @@ func (s *service) GetPostingAccounts(ctx context.Context, userID int64) ([]Posti
 		}
 	}
 	return result, nil
+}
+
+func (s *service) ExportExcel(ctx context.Context, userID int64) ([]byte, error) {
+	log := logger.FromContext(ctx)
+
+	accounts, err := s.repo.FindByUserID(ctx, userID)
+	if err != nil {
+		log.Error("account ExportExcel: failed to fetch accounts", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	exported, err := GenerateAccountExport(accounts)
+	if err != nil {
+		log.Error("account ExportExcel: failed to generate export", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	log.Info("account export generated", "user_id", userID, "account_count", len(accounts))
+	return exported, nil
 }
 
 // toResponse maps an Account entity to AccountResponse DTO.
