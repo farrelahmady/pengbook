@@ -1,10 +1,12 @@
 package account
 
 // CreateAccountRequest is the DTO payload for POST /accounts.
+// The code is generated server-side from the parent (max sibling segment + 1),
+// so the client only sends the name and the parent. Level is derived from the
+// parent (parent.level + 1) — the level/type columns are DB-generated.
 type CreateAccountRequest struct {
-	Code     string `json:"code" example:"1.01.01.01" validate:"required"`
 	Name     string `json:"name" example:"Mandiri - Main" validate:"required,min=1,max=200"`
-	ParentID *int64 `json:"parentId,omitempty"`
+	ParentID *int64 `json:"parentId" validate:"required"`
 }
 
 // UpdateAccountRequest is the DTO payload for PUT /accounts/{id}.
@@ -71,4 +73,13 @@ type PostingAccountResponse struct {
 	ID   int64  `json:"id"`
 	Code string `json:"code"`
 	Name string `json:"name"`
+}
+
+// ParentListItem is a lightweight candidate parent for the create-account form.
+type ParentListItem struct {
+	ID    int64  `json:"id"`
+	Code  string `json:"code"`
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Level int8   `json:"level"`
 }

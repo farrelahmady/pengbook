@@ -208,6 +208,7 @@
 	"accountPage": {
 		"title": "Chart of Accounts",
 		"sectionTitle": "Accounts",
+		"fab": "Add Account",
 		"summaryTotal": {
 			"label": "Total"
 		},
@@ -218,7 +219,29 @@
 			"label": "Header"
 		},
 		"emptyTitle": "No accounts yet",
-		"emptyDescription": "Add accounts to start recording transactions."
+		"emptyDescription": "Add accounts to start recording transactions.",
+		"create": {
+			"title": "New Account",
+			"level": "Level",
+			"level1": "Category",
+			"level2": "Sub-category",
+			"level3": "Posting Account",
+			"parent": "Parent",
+			"parentPlaceholder": "Select parent",
+			"name": "Account Name",
+			"namePlaceholder": "e.g. Mandiri - Main",
+			"submit": "Save",
+			"hints": {
+				"autoCode": "Account code is generated automatically from the parent.",
+				"header": "Header accounts are for grouping only and cannot be used in journals.",
+				"posting": "Posting accounts are used to record journal transactions.",
+				"assetBalance": "Starting balance Rp0 — balance is computed automatically from journals."
+			},
+			"toastLoading": "Saving account...",
+			"toastSuccess": "Account {code} created",
+			"toastError": "Failed to create account",
+			"toastValidation": "Complete the parent and account name"
+		}
 	},
 	"auth": {
 		"login": {

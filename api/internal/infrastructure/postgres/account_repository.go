@@ -263,3 +263,72 @@ func (r *accountRepository) FindPostingByUserID(ctx context.Context, userID int6
 	}
 	return accounts, rows.Err()
 }
+
+const findByLevelQuery = `
+	SELECT id, user_id, code, name, type, level, parent_id, created_at, updated_at
+	FROM accounts
+	WHERE user_id = $1 AND level = $2
+	ORDER BY code
+`
+
+func (r *accountRepository) FindByLevel(ctx context.Context, userID int64, level int8) ([]account.Account, error) {
+	rows, err := r.db(ctx).Query(ctx, findByLevelQuery, userID, level)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accounts []account.Account
+	for rows.Next() {
+		var a account.Account
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Code, &a.Name, &a.Type, &a.Level, &a.ParentID, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, a)
+	}
+	return accounts, rows.Err()
+}
+
+const findMaxChildCodeQuery = `
+	SELECT MAX(code) FROM accounts
+	WHERE user_id = $1 AND parent_id = $2
+`
+
+func (r *accountRepository) FindMaxChildCode(ctx context.Context, userID int64, parentID int64) (string, bool, error) {
+	var code *string
+	if err := r.db(ctx).QueryRow(ctx, findMaxChildCodeQuery, userID, parentID).Scan(&code); err != nil {
+		return "", false, err
+	}
+	if code == nil {
+		return "", false, nil
+	}
+	return *code, true, nil
+}
+
+const seedRootsQuery = `
+	INSERT INTO accounts (user_id, code, name, parent_id)
+	VALUES
+		($1, '1.00.00.00', 'Assets', NULL),
+		($1, '2.00.00.00', 'Liabilities', NULL),
+		($1, '3.00.00.00', 'Equity', NULL),
+		($1, '4.00.00.00', 'Revenue', NULL),
+		($1, '5.00.00.00', 'Expenses', NULL),
+		($1, '6.00.00.00', 'Miscellaneous Transactions', NULL)
+	ON CONFLICT (user_id, code) DO NOTHING
+`
+
+func (r *accountRepository) SeedRoots(ctx context.Context, userID int64) error {
+	_, err := r.db(ctx).Exec(ctx, seedRootsQuery, userID)
+	return err
+}
+
+const ensureBalanceQuery = `
+	INSERT INTO account_balances (account_id, balance)
+	VALUES ($1, 0)
+	ON CONFLICT (account_id) DO NOTHING
+`
+
+func (r *accountRepository) EnsureBalance(ctx context.Context, accountID int64) error {
+	_, err := r.db(ctx).Exec(ctx, ensureBalanceQuery, accountID)
+	return err
+}

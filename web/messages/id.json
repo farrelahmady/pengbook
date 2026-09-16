@@ -208,6 +208,7 @@
 	"accountPage": {
 		"title": "Bagan Akun",
 		"sectionTitle": "Perkiraan",
+		"fab": "Tambah Akun",
 		"summaryTotal": {
 			"label": "Total"
 		},
@@ -218,7 +219,29 @@
 			"label": "Header"
 		},
 		"emptyTitle": "Belum ada akun",
-		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi."
+		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi.",
+		"create": {
+			"title": "Buat Akun",
+			"level": "Level",
+			"level1": "Kategori",
+			"level2": "Sub-kategori",
+			"level3": "Akun Posting",
+			"parent": "Parent",
+			"parentPlaceholder": "Pilih parent",
+			"name": "Nama Akun",
+			"namePlaceholder": "cth. Mandiri - Main",
+			"submit": "Simpan",
+			"hints": {
+				"autoCode": "Kode akun dibuat otomatis mengikuti parent.",
+				"header": "Akun header hanya untuk pengelompokan dan tidak dapat dipakai dalam jurnal.",
+				"posting": "Akun posting dipakai untuk mencatat transaksi jurnal.",
+				"assetBalance": "Saldo awal Rp0 — saldo terhitung otomatis dari jurnal."
+			},
+			"toastLoading": "Menyimpan akun...",
+			"toastSuccess": "Akun {code} berhasil dibuat",
+			"toastError": "Gagal membuat akun",
+			"toastValidation": "Lengkapi parent dan nama akun"
+		}
 	},
 	"auth": {
 		"login": {

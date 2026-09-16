@@ -1,7 +1,7 @@
 # Review Fitur Akun (Chart of Accounts)
 
 **Tanggal**: 16 September 2026
-**Status**: Tahap 1 (F1, F2) Selesai — `GET /tree` terpisah, `postingCount` dari backend, rename Coa→Account
+**Status**: Tahap 2 sebagian (F1, F2, F3) Selesai — `GET /tree`, `postingCount`, create akun + codegen, rename Coa→Account
 **Dokumen Terkait**: [Review Fitur Jurnal](./REVIEW_FITUR_JURNAL.md), [Architecture Issues](../issues/ARCHITECTURE_ISSUES_2026-09-11.md)
 
 ---

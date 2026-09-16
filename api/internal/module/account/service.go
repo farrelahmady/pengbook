@@ -3,7 +3,12 @@ package account
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"pengbook/api/internal/database"
 	"pengbook/api/pkg/logger"
@@ -11,11 +16,17 @@ import (
 
 // Errors
 var (
-	ErrNotFound      = errors.New("account not found")
-	ErrCodeExists    = errors.New("account code already exists for this user")
-	ErrInvalidCode   = errors.New("invalid account code format")
-	ErrHasChildren   = errors.New("account has children, cannot delete")
+	ErrNotFound        = errors.New("account not found")
+	ErrCodeExists      = errors.New("account code already exists for this user")
+	ErrInvalidCode     = errors.New("invalid account code format")
+	ErrHasChildren     = errors.New("account has children, cannot delete")
 	ErrHasJournalLines = errors.New("account has journal entry lines, cannot delete")
+
+	ErrParentRequired  = errors.New("parent account is required")
+	ErrParentNotFound  = errors.New("parent account not found")
+	ErrParentIsPosting = errors.New("posting accounts cannot have children")
+	ErrCodeExhausted   = errors.New("no more codes available under this parent")
+	ErrInvalidLevel    = errors.New("level must be between 0 and 2")
 )
 
 // Service is the PORT (interface) for account business logic.
@@ -25,6 +36,12 @@ type Service interface {
 
 	// GetTree returns the Account hierarchical tree grouped by type for a user.
 	GetTree(ctx context.Context, userID int64) (*AccountTree, error)
+
+	// GetParents returns candidate parents at the given level (0-2) for a user.
+	GetParents(ctx context.Context, userID int64, level int8) ([]ParentListItem, error)
+
+	// SeedRoots creates the six fixed level-0 roots for a user (idempotent).
+	SeedRoots(ctx context.Context, userID int64) error
 
 	// Create creates a new account for the given user.
 	Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error)
@@ -91,19 +108,53 @@ func (s *service) GetTree(ctx context.Context, userID int64) (*AccountTree, erro
 func (s *service) Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error) {
 	log := logger.FromContext(ctx)
 
+	if req.ParentID == nil {
+		return nil, ErrParentRequired
+	}
+
+	parent, err := s.repo.FindByID(ctx, *req.ParentID)
+	if err != nil {
+		log.Error("account create: failed to find parent", "user_id", userID, "parent_id", *req.ParentID, "error", err)
+		return nil, err
+	}
+	if parent == nil || parent.UserID != userID {
+		return nil, ErrParentNotFound
+	}
+	if parent.Level >= 3 {
+		return nil, ErrParentIsPosting
+	}
+
+	code, err := s.nextChildCode(ctx, userID, parent)
+	if err != nil {
+		return nil, err
+	}
+
 	a := &Account{
 		UserID:   userID,
-		Code:     req.Code,
+		Code:     code,
 		Name:     req.Name,
 		ParentID: req.ParentID,
 	}
 
 	var created *Account
-	err := s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		if err := s.repo.Create(ctx, a); err != nil {
+			// Race: two concurrent creates generated the same code.
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return ErrCodeExists
+			}
 			return err
 		}
 		created = a
+
+		// Asset posting accounts track a cached balance (starts at 0,
+		// recalculated from journals). Other types have no balance row.
+		if a.Type == AccountTypeAsset && a.Level == 3 {
+			if err := s.repo.EnsureBalance(ctx, a.ID); err != nil {
+				return err
+			}
+		}
 
 		// Audit log
 		return s.repo.InsertAuditLog(ctx, &AccountAuditLog{
@@ -114,12 +165,82 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateAccountReq
 		})
 	})
 	if err != nil {
-		log.Error("account create: failed to create account", "user_id", userID, "code", req.Code, "error", err)
+		log.Error("account create: failed to create account", "user_id", userID, "parent_id", *req.ParentID, "error", err)
 		return nil, err
 	}
 
 	log.Info("account created", "user_id", userID, "account_id", a.ID, "code", a.Code, "name", a.Name)
 	return toResponse(created), nil
+}
+
+// nextChildCode generates the next child code under the given parent:
+// it copies the parent segments and bumps the segment at the child level
+// to max(sibling segment) + 1, zeroing the remaining segments.
+func (s *service) nextChildCode(ctx context.Context, userID int64, parent *Account) (string, error) {
+	childLevel := parent.Level + 1 // 1..3
+
+	maxCode, hasChildren, err := s.repo.FindMaxChildCode(ctx, userID, parent.ID)
+	if err != nil {
+		return "", err
+	}
+
+	parentSegs := strings.Split(parent.Code, ".")
+	nextSeg := 1
+	if hasChildren {
+		childSegs := strings.Split(maxCode, ".")
+		if len(childSegs) != 4 {
+			return "", ErrInvalidCode
+		}
+		n, err := strconv.Atoi(childSegs[childLevel])
+		if err != nil {
+			return "", ErrInvalidCode
+		}
+		nextSeg = n + 1
+	}
+	if nextSeg > 99 {
+		return "", ErrCodeExhausted
+	}
+
+	segs := make([]string, 4)
+	copy(segs, parentSegs)
+	segs[childLevel] = fmt.Sprintf("%02d", nextSeg)
+	for i := int(childLevel) + 1; i < 4; i++ {
+		segs[i] = "00"
+	}
+	return strings.Join(segs, "."), nil
+}
+
+func (s *service) GetParents(ctx context.Context, userID int64, level int8) ([]ParentListItem, error) {
+	if level < 0 || level > 2 {
+		return nil, ErrInvalidLevel
+	}
+
+	accounts, err := s.repo.FindByLevel(ctx, userID, level)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ParentListItem, len(accounts))
+	for i, a := range accounts {
+		result[i] = ParentListItem{
+			ID:    a.ID,
+			Code:  a.Code,
+			Name:  a.Name,
+			Type:  string(a.Type),
+			Level: a.Level,
+		}
+	}
+	return result, nil
+}
+
+func (s *service) SeedRoots(ctx context.Context, userID int64) error {
+	log := logger.FromContext(ctx)
+	if err := s.repo.SeedRoots(ctx, userID); err != nil {
+		log.Error("account seed roots: failed", "user_id", userID, "error", err)
+		return err
+	}
+	log.Info("account roots seeded", "user_id", userID)
+	return nil
 }
 
 func (s *service) Update(ctx context.Context, userID int64, accountID int64, req UpdateAccountRequest) (*AccountResponse, error) {

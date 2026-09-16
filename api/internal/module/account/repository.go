@@ -45,4 +45,20 @@ type Repository interface {
 
 	// FindPostingByUserID returns all posting accounts (level=3) for the given user.
 	FindPostingByUserID(ctx context.Context, userID int64) ([]Account, error)
+
+	// FindByLevel returns all accounts of the given user at the given level,
+	// ordered by code. Used to list candidate parents for account creation.
+	FindByLevel(ctx context.Context, userID int64, level int8) ([]Account, error)
+
+	// FindMaxChildCode returns the highest child code of the given parent.
+	// Returns ("", false, nil) when the parent has no children yet.
+	FindMaxChildCode(ctx context.Context, userID int64, parentID int64) (string, bool, error)
+
+	// SeedRoots creates the six fixed level-0 roots for a new user.
+	// Idempotent: existing roots are left untouched.
+	SeedRoots(ctx context.Context, userID int64) error
+
+	// EnsureBalance creates the zero balance row for an Asset posting account.
+	// Idempotent: an existing row is left untouched.
+	EnsureBalance(ctx context.Context, accountID int64) error
 }

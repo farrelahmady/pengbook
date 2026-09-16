@@ -1,6 +1,14 @@
 import { authHttpClient } from "@/lib/http-client";
 import { createLogger } from "@/lib/logger";
-import { ApiResponse, AccountSummary, AccountTree, PostingAccount } from "@/types";
+import {
+	ApiResponse,
+	Account,
+	AccountSummary,
+	AccountTree,
+	CreateAccountDto,
+	ParentListItem,
+	PostingAccount,
+} from "@/types";
 
 const logger = createLogger("account.service");
 
@@ -42,6 +50,41 @@ export const accountService = {
 		);
 		logger.info("Account tree fetched", {
 			groups: res.data.data.groups.length,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Get candidate parents at the given parent level (0-2) for account creation.
+	 * Real API call to GET /api/v1/accounts/parents?level=N
+	 */
+	getParents: async (level: number): Promise<ParentListItem[]> => {
+		logger.debug("Fetching parent accounts", { level });
+		const client = authHttpClient();
+		const res = await client.get<ApiResponse<ParentListItem[]>>(
+			`${API_BASE}/accounts/parents?level=${level}`,
+		);
+		logger.info("Parent accounts fetched", {
+			level,
+			count: res.data.data.length,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Create a new account. Code is generated server-side from the parent.
+	 * Real API call to POST /api/v1/accounts
+	 */
+	create: async (dto: CreateAccountDto): Promise<Account> => {
+		logger.debug("Creating account", { name: dto.name, parentId: dto.parentId });
+		const client = authHttpClient();
+		const res = await client.post<ApiResponse<Account>>(
+			`${API_BASE}/accounts`,
+			dto,
+		);
+		logger.info("Account created", {
+			id: res.data.data.id,
+			code: res.data.data.code,
 		});
 		return res.data.data;
 	},

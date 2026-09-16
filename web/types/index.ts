@@ -65,9 +65,16 @@ export interface AccountWithChildren extends Account {
 }
 
 export interface CreateAccountDto {
+	name: string;
+	parentId: number;
+}
+
+export interface ParentListItem {
+	id: number;
 	code: string;
 	name: string;
-	parentId?: number;
+	type: AccountType;
+	level: number;
 }
 
 // Journal

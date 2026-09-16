@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,20 +80,59 @@ func createUser(t *testing.T, tc *testContext) int64 {
 	return u.ID
 }
 
-// createAccount creates a test posting account and returns the ID.
+// createAccount creates a test account with the exact code (building the
+// parent chain first) and returns the ID. Fixtures bypass the service
+// codegen and insert explicit codes via the repository.
 func createAccount(t *testing.T, tc *testContext, userID int64, code string) int64 {
 	t.Helper()
 	ctx := context.Background()
 
-	acc, err := tc.accSvc.Create(ctx, userID, account.CreateAccountRequest{
-		Code: code,
-		Name: fmt.Sprintf("Account %s", code),
-	})
-	if err != nil {
-		t.Fatalf("create account: %v", err)
+	segs := strings.Split(code, ".")
+	if len(segs) != 4 {
+		t.Fatalf("invalid test account code: %s", code)
+	}
+	prefixes := []string{
+		fmt.Sprintf("%s.00.00.00", segs[0]),
+		fmt.Sprintf("%s.%s.00.00", segs[0], segs[1]),
+		fmt.Sprintf("%s.%s.%s.00", segs[0], segs[1], segs[2]),
+		code,
+	}
+	level := 0
+	for _, s := range segs[1:] {
+		if s != "00" {
+			level++
+		}
 	}
 
-	return acc.ID
+	existing, err := tc.accRepo.FindByCodes(ctx, prefixes[:level+1])
+	if err != nil {
+		t.Fatalf("find accounts: %v", err)
+	}
+
+	var parentID *int64
+	var lastID int64
+	for _, p := range prefixes[:level+1] {
+		if acc, ok := existing[p]; ok {
+			id := acc.ID
+			parentID = &id
+			lastID = id
+			continue
+		}
+		a := &account.Account{
+			UserID:   userID,
+			Code:     p,
+			Name:     fmt.Sprintf("Account %s", p),
+			ParentID: parentID,
+		}
+		if err := tc.accRepo.Create(ctx, a); err != nil {
+			t.Fatalf("create account %s: %v", p, err)
+		}
+		id := a.ID
+		parentID = &id
+		lastID = id
+	}
+
+	return lastID
 }
 
 // ── Repository Tests ─────────────────────────────────────────────────────────
@@ -443,12 +483,10 @@ func TestService_Create_ErrNotPostingAccount(t *testing.T) {
 	userID := createUser(t, tc)
 
 	// Create a header account (level < 3) - use valid 4-segment code
-	headerAcc, err := tc.accSvc.Create(ctx, userID, account.CreateAccountRequest{
-		Code: "1.01.00.00",
-		Name: "Header Account",
-	})
-	if err != nil {
-		t.Fatalf("create header account: %v", err)
+	headerID := createAccount(t, tc, userID, "1.01.00.00")
+	headerAcc, err := tc.accRepo.FindByID(ctx, headerID)
+	if err != nil || headerAcc == nil {
+		t.Fatalf("find header account: %v", err)
 	}
 
 	accID2 := createAccount(t, tc, userID, "4.01.01.01")

@@ -71,15 +71,15 @@ func main() {
 	userSvc := user.NewService(userRepo, txManager)
 	userHandler := user.NewHandler(userSvc)
 	
-	// Auth module
-	authTokenRepo := redis.NewAuthTokenRepository(redisClient)
-	authSvc := auth.NewService(userRepo, authTokenRepo, txManager, cfg.JWT.Secret)
-	authHandler := auth.NewHandler(authSvc)
-
-	// Account module
+	// Account module (built before auth: registration seeds account roots)
 	accountRepo := postgres.NewAccountRepository(pool)
 	accountSvc := account.NewService(accountRepo, txManager)
 	accountHandler := account.NewHandler(accountSvc)
+
+	// Auth module
+	authTokenRepo := redis.NewAuthTokenRepository(redisClient)
+	authSvc := auth.NewService(userRepo, authTokenRepo, txManager, cfg.JWT.Secret, accountSvc)
+	authHandler := auth.NewHandler(authSvc)
 
 	// Journal module
 	journalRepo := postgres.NewJournalRepository(pool)
