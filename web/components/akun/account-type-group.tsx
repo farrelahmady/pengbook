@@ -3,6 +3,7 @@
 import { AccountTypeGroup, AccountWithChildren } from "@/types";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
 	Wallet,
 	CreditCard,
@@ -10,7 +11,10 @@ import {
 	TrendingUp,
 	TrendingDown,
 	ChevronUp,
+	Pencil,
 } from "lucide-react";
+import { EditAccountSheet } from "./edit-account-sheet";
+import { highlightMatch } from "./account-search";
 
 const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
 	wallet: Wallet,
@@ -30,18 +34,13 @@ const typeColorMap: Record<string, string> = {
 
 interface AccountTypeGroupCardProps {
 	group: AccountTypeGroup;
+	expanded: boolean;
+	onToggle: () => void;
+	query?: string;
 }
 
-function countPostingAccounts(accounts: AccountWithChildren[]): number {
-	let count = 0;
-	for (const acc of accounts) {
-		if (acc.isPosting) count++;
-		count += countPostingAccounts(acc.children);
-	}
-	return count;
-}
-
-function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[]; depth?: number }) {
+function AccountTree({ accounts, depth = 0, onEdit, query = "" }: { accounts: AccountWithChildren[]; depth?: number; onEdit: (acc: AccountWithChildren) => void; query?: string }) {
+	const t = useTranslations("accountPage");
 	return (
 		<>
 			{accounts.map((acc) => (
@@ -58,7 +57,7 @@ function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[];
 								<div className="w-0.5 h-4 bg-secondary-200 rounded-full shrink-0" />
 							)}
 							<div>
-								<p className="font-mono text-[10px] text-secondary-400">{acc.code}</p>
+								<p className="font-mono text-[10px] text-secondary-400">{query ? highlightMatch(acc.code, query) : acc.code}</p>
 								<p
 									className={cn(
 										"text-[13px] leading-snug",
@@ -67,24 +66,32 @@ function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[];
 											: "text-secondary-600 font-semibold",
 									)}
 								>
-									{acc.name}
+									{query ? highlightMatch(acc.name, query) : acc.name}
 								</p>
 							</div>
 						</div>
-						<div className="shrink-0">
+						<div className="shrink-0 flex items-center gap-1">
 							{acc.isPosting ? (
 								<span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-success-50 text-success-700">
-									Posting
+									{t("badge.posting")}
 								</span>
 							) : (
 								<span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-secondary-100 text-secondary-500">
-									Header
+									{t("badge.header")}
 								</span>
 							)}
+							<button
+								type="button"
+								onClick={() => onEdit(acc)}
+								aria-label={`Edit ${acc.code}`}
+								className="p-1.5 rounded-lg text-secondary-400 hover:text-secondary-600 hover:bg-secondary-100 active:scale-95 transition-all no-tap"
+							>
+								<Pencil size={13} />
+							</button>
 						</div>
 					</div>
 					{acc.children.length > 0 && (
-						<AccountTree accounts={acc.children} depth={depth + 1} />
+						<AccountTree accounts={acc.children} depth={depth + 1} onEdit={onEdit} query={query} />
 					)}
 				</div>
 			))}
@@ -92,16 +99,21 @@ function AccountTree({ accounts, depth = 0 }: { accounts: AccountWithChildren[];
 	);
 }
 
-export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
-	const [expanded, setExpanded] = useState(false);
+export function AccountTypeGroupCard({ group, expanded, onToggle, query = "" }: AccountTypeGroupCardProps) {
+	const t = useTranslations("accountPage");
+	const [selectedAccount, setSelectedAccount] =
+		useState<AccountWithChildren | null>(null);
 	const Icon = iconMap[group.icon] ?? Wallet;
-	const postingCount = countPostingAccounts(group.accounts);
+	const contentId = `account-group-${group.type}`;
 
 	return (
-		<div className="card-default shadow-card overflow-hidden">
+		<>
+			<div className="card-default shadow-card overflow-hidden">
 			{/* Header */}
 			<button
-				onClick={() => setExpanded(!expanded)}
+				onClick={onToggle}
+				aria-expanded={expanded}
+				aria-controls={contentId}
 				className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-secondary-50 transition-colors"
 			>
 				<div
@@ -117,7 +129,7 @@ export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 						{group.label}
 					</p>
 					<p className="text-[11px] text-secondary-400">
-						{group.count} akun · {postingCount} posting
+						{t("groupSubtitle", { count: group.count, postingCount: group.postingCount })}
 					</p>
 				</div>
 				<ChevronUp
@@ -131,10 +143,19 @@ export function AccountTypeGroupCard({ group }: AccountTypeGroupCardProps) {
 
 			{/* Accounts tree */}
 			{expanded && (
-				<div className="border-t border-black/[0.06]">
-					<AccountTree accounts={group.accounts} />
+				<div id={contentId} className="border-t border-black/[0.06]">
+					<AccountTree accounts={group.accounts} onEdit={setSelectedAccount} query={query} />
 				</div>
 			)}
-		</div>
+			</div>
+			<EditAccountSheet
+				key={selectedAccount?.id ?? "closed"}
+				account={selectedAccount}
+				open={selectedAccount !== null}
+				onOpenChange={(v) => {
+					if (!v) setSelectedAccount(null);
+				}}
+			/>
+		</>
 	);
 }

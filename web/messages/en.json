@@ -35,7 +35,7 @@
 		},
 		"filter": {
 			"dateRange": "Date",
-			"coa": "Account",
+			"account": "Account",
 			"clear": "Reset",
 			"selectDateRange": "Select Date Range",
 			"from": "From",
@@ -205,9 +205,10 @@
 			}
 		}
 	},
-	"coaPage": {
+	"accountPage": {
 		"title": "Chart of Accounts",
 		"sectionTitle": "Accounts",
+		"fab": "Add Account",
 		"summaryTotal": {
 			"label": "Total"
 		},
@@ -218,7 +219,58 @@
 			"label": "Header"
 		},
 		"emptyTitle": "No accounts yet",
-		"emptyDescription": "Add accounts to start recording transactions."
+		"emptyDescription": "Add accounts to start recording transactions.",
+		"error": {
+			"title": "Failed to load accounts",
+			"description": "Check your connection and try again.",
+			"retry": "Retry"
+		},
+		"badge": {
+			"posting": "Posting",
+			"header": "Header"
+		},
+		"groupSubtitle": "{count} accounts · {postingCount} posting",
+		"expandAll": "Expand all",
+		"collapseAll": "Collapse all",
+		"search": {
+			"placeholder": "Search account code or name...",
+			"resultCount": "{count} result(s) for '{query}'",
+			"emptyTitle": "No matching accounts",
+			"emptyDescription": "Try another keyword or clear the search.",
+			"clear": "Clear"
+		},
+		"create": {
+			"title": "New Account",
+			"level": "Level",
+			"level1": "Category",
+			"level2": "Sub-category",
+			"level3": "Posting Account",
+			"parent": "Parent",
+			"parentPlaceholder": "Select parent",
+			"name": "Account Name",
+			"namePlaceholder": "e.g. Mandiri - Main",
+			"submit": "Save",
+			"hints": {
+				"autoCode": "Account code is generated automatically from the parent.",
+				"header": "Header accounts are for grouping only and cannot be used in journals.",
+				"posting": "Posting accounts are used to record journal transactions.",
+				"assetBalance": "Starting balance Rp0 — balance is computed automatically from journals."
+			},
+			"toastLoading": "Saving account...",
+			"toastSuccess": "Account {code} created",
+			"toastError": "Failed to create account",
+			"toastValidation": "Complete the parent and account name"
+		},
+		"edit": {
+			"title": "Edit Account",
+			"code": "Code",
+			"name": "Account Name",
+			"submit": "Save",
+			"toastLoading": "Saving changes...",
+			"toastSuccess": "Account {code} updated",
+			"toastError": "Failed to update account",
+			"toastValidation": "Account name cannot be empty"
+		}
 	},
 	"auth": {
 		"login": {

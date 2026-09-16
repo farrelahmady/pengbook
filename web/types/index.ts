@@ -65,9 +65,20 @@ export interface AccountWithChildren extends Account {
 }
 
 export interface CreateAccountDto {
+	name: string;
+	parentId: number;
+}
+
+export interface UpdateAccountDto {
+	name: string;
+}
+
+export interface ParentListItem {
+	id: number;
 	code: string;
 	name: string;
-	parentId?: number;
+	type: AccountType;
+	level: number;
 }
 
 // Journal
@@ -239,11 +250,15 @@ export interface AccountTypeGroup {
 	icon: string;
 	accounts: AccountWithChildren[];
 	count: number;
+	postingCount: number;
 }
 
 export interface AccountSummary {
 	totalAccounts: number;
 	postingAccounts: number;
 	headerAccounts: number;
+}
+
+export interface AccountTree {
 	groups: AccountTypeGroup[];
 }

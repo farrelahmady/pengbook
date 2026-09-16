@@ -3,7 +3,12 @@ package account
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"pengbook/api/internal/database"
 	"pengbook/api/pkg/logger"
@@ -11,17 +16,32 @@ import (
 
 // Errors
 var (
-	ErrNotFound      = errors.New("account not found")
-	ErrCodeExists    = errors.New("account code already exists for this user")
-	ErrInvalidCode   = errors.New("invalid account code format")
-	ErrHasChildren   = errors.New("account has children, cannot delete")
+	ErrNotFound        = errors.New("account not found")
+	ErrCodeExists      = errors.New("account code already exists for this user")
+	ErrInvalidCode     = errors.New("invalid account code format")
+	ErrHasChildren     = errors.New("account has children, cannot delete")
 	ErrHasJournalLines = errors.New("account has journal entry lines, cannot delete")
+
+	ErrParentRequired  = errors.New("parent account is required")
+	ErrParentNotFound  = errors.New("parent account not found")
+	ErrParentIsPosting = errors.New("posting accounts cannot have children")
+	ErrCodeExhausted   = errors.New("no more codes available under this parent")
+	ErrInvalidLevel    = errors.New("level must be between 0 and 2")
 )
 
 // Service is the PORT (interface) for account business logic.
 type Service interface {
-	// GetSummary returns the COA summary with hierarchical tree for a user.
-	GetSummary(ctx context.Context, userID int64) (*CoaSummary, error)
+	// GetSummary returns the lightweight Account summary counts for a user.
+	GetSummary(ctx context.Context, userID int64) (*AccountSummary, error)
+
+	// GetTree returns the Account hierarchical tree grouped by type for a user.
+	GetTree(ctx context.Context, userID int64) (*AccountTree, error)
+
+	// GetParents returns candidate parents at the given level (0-2) for a user.
+	GetParents(ctx context.Context, userID int64, level int8) ([]ParentListItem, error)
+
+	// SeedRoots creates the six fixed level-0 roots for a user (idempotent).
+	SeedRoots(ctx context.Context, userID int64) error
 
 	// Create creates a new account for the given user.
 	Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error)
@@ -45,7 +65,7 @@ func NewService(repo Repository, tx database.TxManager) Service {
 	return &service{repo: repo, tx: tx}
 }
 
-func (s *service) GetSummary(ctx context.Context, userID int64) (*CoaSummary, error) {
+func (s *service) GetSummary(ctx context.Context, userID int64) (*AccountSummary, error) {
 	total, err := s.repo.CountByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -61,6 +81,14 @@ func (s *service) GetSummary(ctx context.Context, userID int64) (*CoaSummary, er
 		return nil, err
 	}
 
+	return &AccountSummary{
+		TotalAccounts:   int(total),
+		PostingAccounts: int(posting),
+		HeaderAccounts:  int(header),
+	}, nil
+}
+
+func (s *service) GetTree(ctx context.Context, userID int64) (*AccountTree, error) {
 	accounts, err := s.repo.FindByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -72,30 +100,61 @@ func (s *service) GetSummary(ctx context.Context, userID int64) (*CoaSummary, er
 	// Group by type
 	groups := groupByType(tree)
 
-	return &CoaSummary{
-		TotalAccounts:   int(total),
-		PostingAccounts: int(posting),
-		HeaderAccounts:  int(header),
-		Groups:          groups,
+	return &AccountTree{
+		Groups: groups,
 	}, nil
 }
 
 func (s *service) Create(ctx context.Context, userID int64, req CreateAccountRequest) (*AccountResponse, error) {
 	log := logger.FromContext(ctx)
 
+	if req.ParentID == nil {
+		return nil, ErrParentRequired
+	}
+
+	parent, err := s.repo.FindByID(ctx, *req.ParentID)
+	if err != nil {
+		log.Error("account create: failed to find parent", "user_id", userID, "parent_id", *req.ParentID, "error", err)
+		return nil, err
+	}
+	if parent == nil || parent.UserID != userID {
+		return nil, ErrParentNotFound
+	}
+	if parent.Level >= 3 {
+		return nil, ErrParentIsPosting
+	}
+
+	code, err := s.nextChildCode(ctx, userID, parent)
+	if err != nil {
+		return nil, err
+	}
+
 	a := &Account{
 		UserID:   userID,
-		Code:     req.Code,
+		Code:     code,
 		Name:     req.Name,
 		ParentID: req.ParentID,
 	}
 
 	var created *Account
-	err := s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		if err := s.repo.Create(ctx, a); err != nil {
+			// Race: two concurrent creates generated the same code.
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return ErrCodeExists
+			}
 			return err
 		}
 		created = a
+
+		// Asset posting accounts track a cached balance (starts at 0,
+		// recalculated from journals). Other types have no balance row.
+		if a.Type == AccountTypeAsset && a.Level == 3 {
+			if err := s.repo.EnsureBalance(ctx, a.ID); err != nil {
+				return err
+			}
+		}
 
 		// Audit log
 		return s.repo.InsertAuditLog(ctx, &AccountAuditLog{
@@ -106,12 +165,82 @@ func (s *service) Create(ctx context.Context, userID int64, req CreateAccountReq
 		})
 	})
 	if err != nil {
-		log.Error("account create: failed to create account", "user_id", userID, "code", req.Code, "error", err)
+		log.Error("account create: failed to create account", "user_id", userID, "parent_id", *req.ParentID, "error", err)
 		return nil, err
 	}
 
 	log.Info("account created", "user_id", userID, "account_id", a.ID, "code", a.Code, "name", a.Name)
 	return toResponse(created), nil
+}
+
+// nextChildCode generates the next child code under the given parent:
+// it copies the parent segments and bumps the segment at the child level
+// to max(sibling segment) + 1, zeroing the remaining segments.
+func (s *service) nextChildCode(ctx context.Context, userID int64, parent *Account) (string, error) {
+	childLevel := parent.Level + 1 // 1..3
+
+	maxCode, hasChildren, err := s.repo.FindMaxChildCode(ctx, userID, parent.ID)
+	if err != nil {
+		return "", err
+	}
+
+	parentSegs := strings.Split(parent.Code, ".")
+	nextSeg := 1
+	if hasChildren {
+		childSegs := strings.Split(maxCode, ".")
+		if len(childSegs) != 4 {
+			return "", ErrInvalidCode
+		}
+		n, err := strconv.Atoi(childSegs[childLevel])
+		if err != nil {
+			return "", ErrInvalidCode
+		}
+		nextSeg = n + 1
+	}
+	if nextSeg > 99 {
+		return "", ErrCodeExhausted
+	}
+
+	segs := make([]string, 4)
+	copy(segs, parentSegs)
+	segs[childLevel] = fmt.Sprintf("%02d", nextSeg)
+	for i := int(childLevel) + 1; i < 4; i++ {
+		segs[i] = "00"
+	}
+	return strings.Join(segs, "."), nil
+}
+
+func (s *service) GetParents(ctx context.Context, userID int64, level int8) ([]ParentListItem, error) {
+	if level < 0 || level > 2 {
+		return nil, ErrInvalidLevel
+	}
+
+	accounts, err := s.repo.FindByLevel(ctx, userID, level)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ParentListItem, len(accounts))
+	for i, a := range accounts {
+		result[i] = ParentListItem{
+			ID:    a.ID,
+			Code:  a.Code,
+			Name:  a.Name,
+			Type:  string(a.Type),
+			Level: a.Level,
+		}
+	}
+	return result, nil
+}
+
+func (s *service) SeedRoots(ctx context.Context, userID int64) error {
+	log := logger.FromContext(ctx)
+	if err := s.repo.SeedRoots(ctx, userID); err != nil {
+		log.Error("account seed roots: failed", "user_id", userID, "error", err)
+		return err
+	}
+	log.Info("account roots seeded", "user_id", userID)
+	return nil
 }
 
 func (s *service) Update(ctx context.Context, userID int64, accountID int64, req UpdateAccountRequest) (*AccountResponse, error) {
@@ -129,17 +258,16 @@ func (s *service) Update(ctx context.Context, userID int64, accountID int64, req
 		return nil, ErrNotFound
 	}
 
-	oldValues := JSONB{"name": existing.Name, "parent_id": existing.ParentID}
+	oldValues := JSONB{"name": existing.Name}
 
 	existing.Name = req.Name
-	existing.ParentID = req.ParentID
 
 	err = s.tx.WithTransaction(ctx, func(ctx context.Context) error {
 		if err := s.repo.Update(ctx, existing); err != nil {
 			return err
 		}
 
-		newValues := JSONB{"name": existing.Name, "parent_id": existing.ParentID}
+		newValues := JSONB{"name": existing.Name}
 		return s.repo.InsertAuditLog(ctx, &AccountAuditLog{
 			UserID:    userID,
 			AccountID: &accountID,
@@ -227,13 +355,15 @@ func toResponse(a *Account) *AccountResponse {
 }
 
 // buildTree builds a hierarchical tree from a flat list of accounts.
-func buildTree(accounts []Account) []AccountWithChildren {
-	accountMap := make(map[int64]*AccountWithChildren)
-	var roots []AccountWithChildren
+// Nodes are linked by pointer so children attached later are visible
+// through parents/roots already collected, regardless of input order.
+func buildTree(accounts []Account) []*AccountWithChildren {
+	accountMap := make(map[int64]*AccountWithChildren, len(accounts))
+	var roots []*AccountWithChildren
 
 	// First pass: create all nodes
 	for _, a := range accounts {
-		node := AccountWithChildren{
+		node := &AccountWithChildren{
 			ID:        a.ID,
 			Code:      a.Code,
 			Name:      a.Name,
@@ -243,30 +373,30 @@ func buildTree(accounts []Account) []AccountWithChildren {
 			ParentID:  a.ParentID,
 			CreatedAt: a.CreatedAt.Format(time.RFC3339),
 			UpdatedAt: a.UpdatedAt.Format(time.RFC3339),
-			Children:  []AccountWithChildren{},
+			Children:  []*AccountWithChildren{},
 		}
-		accountMap[a.ID] = &node
+		accountMap[a.ID] = node
 	}
 
-	// Second pass: build tree
+	// Second pass: link nodes (no value copies)
 	for _, a := range accounts {
 		node := accountMap[a.ID]
 		if a.ParentID != nil {
 			if parent, ok := accountMap[*a.ParentID]; ok {
-				parent.Children = append(parent.Children, *node)
+				parent.Children = append(parent.Children, node)
 			} else {
-				roots = append(roots, *node)
+				roots = append(roots, node)
 			}
 		} else {
-			roots = append(roots, *node)
+			roots = append(roots, node)
 		}
 	}
 
 	return roots
 }
 
-// groupByType groups accounts by their type for the COA page.
-func groupByType(roots []AccountWithChildren) []CoaTypeGroup {
+// groupByType groups accounts by their type for the Account page.
+func groupByType(roots []*AccountWithChildren) []AccountTypeGroup {
 	typeOrder := []string{"ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE", "OTHER"}
 	typeLabels := map[string]string{
 		"ASSET":     "Aset",
@@ -285,36 +415,42 @@ func groupByType(roots []AccountWithChildren) []CoaTypeGroup {
 		"OTHER":     "wallet",
 	}
 
-	groupMap := make(map[string]*CoaTypeGroup)
+	groupMap := make(map[string]*AccountTypeGroup)
 	for _, t := range typeOrder {
-		groupMap[t] = &CoaTypeGroup{
-			Type:     t,
-			Label:    typeLabels[t],
-			Icon:     typeIcons[t],
-			Accounts: []AccountWithChildren{},
-			Count:    0,
+		groupMap[t] = &AccountTypeGroup{
+			Type:         t,
+			Label:        typeLabels[t],
+			Icon:         typeIcons[t],
+			Accounts:     []*AccountWithChildren{},
+			Count:        0,
+			PostingCount: 0,
 		}
 	}
 
-	var countType func(nodes []AccountWithChildren) int
-	countType = func(nodes []AccountWithChildren) int {
-		count := 0
+	// countSubtree returns (total, posting) for a subtree in a single pass.
+	var countSubtree func(nodes []*AccountWithChildren) (total, posting int)
+	countSubtree = func(nodes []*AccountWithChildren) (total, posting int) {
 		for _, n := range nodes {
-			count++
-			count += countType(n.Children)
+			total++
+			if n.IsPosting {
+				posting++
+			}
+			childTotal, childPosting := countSubtree(n.Children)
+			total += childTotal
+			posting += childPosting
 		}
-		return count
+		return total, posting
 	}
 
 	for _, root := range roots {
 		if group, ok := groupMap[root.Type]; ok {
 			group.Accounts = append(group.Accounts, root)
-			group.Count = countType(group.Accounts)
+			group.Count, group.PostingCount = countSubtree(group.Accounts)
 		}
 	}
 
 	// Remove empty groups
-	var result []CoaTypeGroup
+	var result []AccountTypeGroup
 	for _, t := range typeOrder {
 		if group := groupMap[t]; len(group.Accounts) > 0 {
 			result = append(result, *group)

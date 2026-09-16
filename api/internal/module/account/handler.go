@@ -26,6 +26,8 @@ func NewHandler(service Service) *Handler {
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/summary", h.GetSummary)
+	r.Get("/tree", h.GetTree)
+	r.Get("/parents", h.GetParents)
 	r.Get("/posting", h.GetPostingAccounts)
 	r.Post("/", h.Create)
 	r.Put("/{id}", h.Update)
@@ -48,6 +50,46 @@ func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, summary)
+}
+
+// GetTree handles GET /api/v1/accounts/tree
+func (h *Handler) GetTree(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	tree, err := h.service.GetTree(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to get account tree")
+		return
+	}
+
+	response.Success(w, http.StatusOK, tree)
+}
+
+// GetParents handles GET /api/v1/accounts/parents?level=N (N = 0..2)
+func (h *Handler) GetParents(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	level, err := strconv.Atoi(r.URL.Query().Get("level"))
+	if err != nil || level < 0 || level > 2 {
+		response.Error(w, http.StatusBadRequest, "level must be between 0 and 2")
+		return
+	}
+
+	parents, err := h.service.GetParents(r.Context(), userID, int8(level))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to get parent accounts")
+		return
+	}
+
+	response.Success(w, http.StatusOK, parents)
 }
 
 // GetPostingAccounts handles GET /api/v1/accounts/posting
@@ -88,8 +130,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.service.Create(r.Context(), userID, req)
 	if err != nil {
-		if errors.Is(err, ErrCodeExists) {
+		switch {
+		case errors.Is(err, ErrCodeExists):
 			response.Error(w, http.StatusConflict, err.Error())
+			return
+		case errors.Is(err, ErrParentRequired), errors.Is(err, ErrParentIsPosting):
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		case errors.Is(err, ErrParentNotFound):
+			response.Error(w, http.StatusNotFound, err.Error())
+			return
+		case errors.Is(err, ErrCodeExhausted):
+			response.Error(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to create account")

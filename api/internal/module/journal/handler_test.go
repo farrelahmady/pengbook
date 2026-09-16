@@ -17,7 +17,6 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"pengbook/api/internal/middleware"
-	"pengbook/api/internal/module/account"
 	"pengbook/api/internal/module/journal"
 )
 
@@ -504,10 +503,8 @@ func TestHandler_Upload_InvalidCSV_NotPostingAccount(t *testing.T) {
 	userID := createUser(t, tc)
 
 	// Create a header account (level < 3)
-	headerAcc, _ := tc.accSvc.Create(ctx, userID, account.CreateAccountRequest{
-		Code: "1.01.00.00",
-		Name: "Header Account",
-	})
+	headerID := createAccount(t, tc, userID, "1.01.00.00")
+	headerAcc, _ := tc.accRepo.FindByID(ctx, headerID)
 	accID2 := createAccount(t, tc, userID, "4.01.01.01")
 	acc2, _ := tc.accRepo.FindByID(ctx, accID2)
 

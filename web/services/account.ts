@@ -1,6 +1,15 @@
 import { authHttpClient } from "@/lib/http-client";
 import { createLogger } from "@/lib/logger";
-import { ApiResponse, AccountSummary, PostingAccount } from "@/types";
+import {
+	ApiResponse,
+	Account,
+	AccountSummary,
+	AccountTree,
+	CreateAccountDto,
+	UpdateAccountDto,
+	ParentListItem,
+	PostingAccount,
+} from "@/types";
 
 const logger = createLogger("account.service");
 
@@ -14,7 +23,7 @@ const API_BASE = "/api/v1";
  */
 export const accountService = {
 	/**
-	 * Get account summary with hierarchical tree.
+	 * Get account summary counts (lightweight, no tree).
 	 * Real API call to GET /api/v1/accounts/summary
 	 */
 	getSummary: async (): Promise<AccountSummary> => {
@@ -26,6 +35,57 @@ export const accountService = {
 		logger.info("Account summary fetched", {
 			totalAccounts: res.data.data.totalAccounts,
 			postingAccounts: res.data.data.postingAccounts,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Get account hierarchical tree grouped by type.
+	 * Real API call to GET /api/v1/accounts/tree
+	 */
+	getTree: async (): Promise<AccountTree> => {
+		logger.debug("Fetching account tree");
+		const client = authHttpClient();
+		const res = await client.get<ApiResponse<AccountTree>>(
+			`${API_BASE}/accounts/tree`,
+		);
+		logger.info("Account tree fetched", {
+			groups: res.data.data.groups.length,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Get candidate parents at the given parent level (0-2) for account creation.
+	 * Real API call to GET /api/v1/accounts/parents?level=N
+	 */
+	getParents: async (level: number): Promise<ParentListItem[]> => {
+		logger.debug("Fetching parent accounts", { level });
+		const client = authHttpClient();
+		const res = await client.get<ApiResponse<ParentListItem[]>>(
+			`${API_BASE}/accounts/parents?level=${level}`,
+		);
+		logger.info("Parent accounts fetched", {
+			level,
+			count: res.data.data.length,
+		});
+		return res.data.data;
+	},
+
+	/**
+	 * Create a new account. Code is generated server-side from the parent.
+	 * Real API call to POST /api/v1/accounts
+	 */
+	create: async (dto: CreateAccountDto): Promise<Account> => {
+		logger.debug("Creating account", { name: dto.name, parentId: dto.parentId });
+		const client = authHttpClient();
+		const res = await client.post<ApiResponse<Account>>(
+			`${API_BASE}/accounts`,
+			dto,
+		);
+		logger.info("Account created", {
+			id: res.data.data.id,
+			code: res.data.data.code,
 		});
 		return res.data.data;
 	},
@@ -43,6 +103,20 @@ export const accountService = {
 		logger.info("Posting accounts fetched", {
 			count: res.data.data.length,
 		});
+		return res.data.data;
+	},
+
+	/**
+	 * Rename an account. Real API call to PUT /api/v1/accounts/{id}
+	 */
+	update: async (id: number, dto: UpdateAccountDto): Promise<Account> => {
+		logger.debug("Updating account", { id, name: dto.name });
+		const client = authHttpClient();
+		const res = await client.put<ApiResponse<Account>>(
+			`${API_BASE}/accounts/${id}`,
+			dto,
+		);
+		logger.info("Account updated", { id, code: res.data.data.code });
 		return res.data.data;
 	},
 };

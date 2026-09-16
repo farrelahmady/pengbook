@@ -28,19 +28,28 @@ type Service interface {
 	Me(ctx context.Context, accessToken string) (*user.User, error)
 }
 
-type service struct {
-	userRepo     user.Repository
-	tokenRepo    TokenRepository
-	tx           database.TxManager
-	jwtSecret    []byte
+// AccountSeeder creates the fixed level-0 account roots for a new user.
+// Implemented by the account module; kept as a narrow interface here to
+// avoid coupling auth to the full account service.
+type AccountSeeder interface {
+	SeedRoots(ctx context.Context, userID int64) error
 }
 
-func NewService(userRepo user.Repository, tokenRepo TokenRepository, tx database.TxManager, jwtSecret string) Service {
+type service struct {
+	userRepo      user.Repository
+	tokenRepo     TokenRepository
+	tx            database.TxManager
+	jwtSecret     []byte
+	accountSeeder AccountSeeder
+}
+
+func NewService(userRepo user.Repository, tokenRepo TokenRepository, tx database.TxManager, jwtSecret string, accountSeeder AccountSeeder) Service {
 	return &service{
-		userRepo:  userRepo,
-		tokenRepo: tokenRepo,
-		tx:        tx,
-		jwtSecret: []byte(jwtSecret),
+		userRepo:      userRepo,
+		tokenRepo:     tokenRepo,
+		tx:            tx,
+		jwtSecret:     []byte(jwtSecret),
+		accountSeeder: accountSeeder,
 	}
 }
 
@@ -83,6 +92,15 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*TokenResp
 	if err := s.userRepo.Create(ctx, newUser); err != nil {
 		log.Error("auth register: failed to create user", "email", req.Email, "error", err)
 		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Every user starts with the six fixed level-0 roots so the
+	// parent-required account creation can never deadlock on empty data.
+	if s.accountSeeder != nil {
+		if err := s.accountSeeder.SeedRoots(ctx, newUser.ID); err != nil {
+			log.Error("auth register: failed to seed account roots", "user_id", newUser.ID, "error", err)
+			return nil, fmt.Errorf("failed to seed account roots: %w", err)
+		}
 	}
 
 	log.Info("user registered", "user_id", newUser.ID, "email", newUser.Email)

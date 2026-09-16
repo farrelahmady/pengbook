@@ -35,7 +35,7 @@
 		},
 		"filter": {
 			"dateRange": "Tanggal",
-			"coa": "Akun",
+			"account": "Akun",
 			"clear": "Reset",
 			"selectDateRange": "Pilih Rentang Tanggal",
 			"from": "Dari",
@@ -205,9 +205,10 @@
 			}
 		}
 	},
-	"coaPage": {
+	"accountPage": {
 		"title": "Bagan Akun",
 		"sectionTitle": "Perkiraan",
+		"fab": "Tambah Akun",
 		"summaryTotal": {
 			"label": "Total"
 		},
@@ -218,7 +219,58 @@
 			"label": "Header"
 		},
 		"emptyTitle": "Belum ada akun",
-		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi."
+		"emptyDescription": "Tambahkan akun untuk mulai mencatat transaksi.",
+		"error": {
+			"title": "Gagal memuat akun",
+			"description": "Periksa koneksi Anda lalu coba lagi.",
+			"retry": "Coba lagi"
+		},
+		"badge": {
+			"posting": "Posting",
+			"header": "Header"
+		},
+		"groupSubtitle": "{count} akun · {postingCount} posting",
+		"expandAll": "Buka semua",
+		"collapseAll": "Tutup semua",
+		"search": {
+			"placeholder": "Cari kode atau nama akun...",
+			"resultCount": "{count} hasil untuk '{query}'",
+			"emptyTitle": "Tidak ada akun yang cocok",
+			"emptyDescription": "Coba kata kunci lain atau hapus pencarian.",
+			"clear": "Hapus"
+		},
+		"create": {
+			"title": "Buat Akun",
+			"level": "Level",
+			"level1": "Kategori",
+			"level2": "Sub-kategori",
+			"level3": "Akun Posting",
+			"parent": "Parent",
+			"parentPlaceholder": "Pilih parent",
+			"name": "Nama Akun",
+			"namePlaceholder": "cth. Mandiri - Main",
+			"submit": "Simpan",
+			"hints": {
+				"autoCode": "Kode akun dibuat otomatis mengikuti parent.",
+				"header": "Akun header hanya untuk pengelompokan dan tidak dapat dipakai dalam jurnal.",
+				"posting": "Akun posting dipakai untuk mencatat transaksi jurnal.",
+				"assetBalance": "Saldo awal Rp0 — saldo terhitung otomatis dari jurnal."
+			},
+			"toastLoading": "Menyimpan akun...",
+			"toastSuccess": "Akun {code} berhasil dibuat",
+			"toastError": "Gagal membuat akun",
+			"toastValidation": "Lengkapi parent dan nama akun"
+		},
+		"edit": {
+			"title": "Ubah Akun",
+			"code": "Kode",
+			"name": "Nama Akun",
+			"submit": "Simpan",
+			"toastLoading": "Menyimpan perubahan...",
+			"toastSuccess": "Akun {code} diperbarui",
+			"toastError": "Gagal memperbarui akun",
+			"toastValidation": "Nama akun tidak boleh kosong"
+		}
 	},
 	"auth": {
 		"login": {
