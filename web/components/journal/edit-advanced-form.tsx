@@ -12,6 +12,10 @@ import { accountService } from "@/services/account";
 import { JournalEntryListItem } from "@/types";
 import { queryKeys } from "@/lib/query-keys";
 import { createLogger } from "@/lib/logger";
+import { AppField } from "@/components/ui/app-field";
+import { AppInput } from "@/components/ui/app-input";
+import { AppSubmitButton } from "@/components/ui/app-submit-button";
+import { AccountSelect } from "@/components/akun/account-select";
 
 const logger = createLogger("EditAdvancedForm");
 
@@ -96,39 +100,29 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 		}
 	}
 
-	const labelClass =
-		"text-[11px] font-semibold uppercase tracking-[0.5px] text-secondary-400 mb-1.5 block";
-	const inputClass =
-		"bg-secondary-50 border border-secondary-200 rounded-xl px-3.5 py-3 text-[13px] text-secondary-800 outline-none focus:border-primary-400 w-full";
-
 	return (
 		<div className="flex flex-col gap-4">
 			{/* Date */}
-			<div>
-				<label className={labelClass}>{t("date")}</label>
-				<input
+			<AppField label={t("date")}>
+				<AppInput
 					type="date"
 					value={date}
 					onChange={(e) => setDate(e.target.value)}
-					className={inputClass}
 				/>
-			</div>
+			</AppField>
 
 			{/* Description */}
-			<div>
-				<label className={labelClass}>{t("description")}</label>
-				<input
+			<AppField label={t("description")}>
+				<AppInput
 					type="text"
 					placeholder={t("descriptionPlaceholder")}
 					value={description}
 					onChange={(e) => setDesc(e.target.value)}
-					className={inputClass}
 				/>
-			</div>
+			</AppField>
 
 			{/* Journal lines table */}
-			<div>
-				<label className={labelClass}>{t("lines")}</label>
+			<AppField label={t("lines")}>
 				<div className="border border-secondary-200 rounded-xl overflow-hidden">
 					{/* Head */}
 					<div className="grid grid-cols-[1fr_80px_80px_28px] gap-1 px-3 py-2 bg-secondary-50 border-b border-secondary-200">
@@ -151,19 +145,17 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 							key={i}
 							className="grid grid-cols-[1fr_80px_80px_28px] gap-1 px-2 py-2 border-b border-secondary-100 last:border-none items-center"
 						>
-							<select
-								value={line.accountId}
-								onChange={(e) => updateLine(i, "accountId", e.target.value)}
-								className="text-[11px] bg-secondary-50 border border-secondary-200 rounded-lg px-2 py-1.5 w-full appearance-none text-secondary-700 outline-none focus:border-primary-400"
-								disabled={isLoadingAccounts}
-							>
-								<option value="">{isLoadingAccounts ? "Loading..." : t("accountPlaceholder")}</option>
-								{postingAccounts.map((a) => (
-									<option key={a.id} value={a.id}>
-										{a.code}
-									</option>
-								))}
-							</select>
+						<AccountSelect
+							value={line.accountId}
+							onChange={(v) => updateLine(i, "accountId", v)}
+							accounts={postingAccounts}
+							isLoading={isLoadingAccounts}
+							placeholder={t("accountPlaceholder")}
+							loadingText="Loading..."
+							grouped={false}
+							display="code"
+							variant="compact"
+						/>
 
 							<input
 								type="number"
@@ -201,7 +193,7 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 					<Plus size={14} />
 					{t("addRow")}
 				</button>
-			</div>
+			</AppField>
 
 			{/* Balance strip */}
 			<div
@@ -248,18 +240,14 @@ export function EditAdvancedForm({ journal, onSuccess }: EditAdvancedFormProps) 
 			</div>
 
 			{/* Submit */}
-			<button
+			<AppSubmitButton
+				variant="stateful"
+				ready={isBalanced && !isSubmitting}
 				onClick={handleSubmit}
 				disabled={!isBalanced || isSubmitting}
-				className={cn(
-					"w-full font-semibold text-[15px] py-3.5 rounded-xl transition-all mt-1",
-					isBalanced && !isSubmitting
-						? "bg-primary-500 text-white active:scale-[0.98]"
-						: "bg-secondary-100 text-secondary-400 cursor-not-allowed",
-				)}
 			>
 				{t("submit")}
-			</button>
+			</AppSubmitButton>
 		</div>
 	);
 }

@@ -11,6 +11,10 @@ import { assetService } from "@/services/asset";
 import { createLogger } from "@/lib/logger";
 import { queryKeys } from "@/lib/query-keys";
 import type { ParentListItem } from "@/types";
+import { AppField } from "@/components/ui/app-field";
+import { AppInput } from "@/components/ui/app-input";
+import { AppSubmitButton } from "@/components/ui/app-submit-button";
+import { AccountSelect } from "@/components/akun/account-select";
 
 const logger = createLogger("asset.create-sheet");
 
@@ -73,11 +77,6 @@ export function CreateAssetSheet({
 		}
 	}
 
-	const selectClass =
-		"w-full bg-secondary-50 border border-secondary-200 rounded-xl px-3.5 py-3 text-[13px] text-secondary-800 outline-none focus:border-primary-400 appearance-none cursor-pointer disabled:opacity-50";
-	const labelClass =
-		"text-[11px] font-semibold uppercase tracking-[0.5px] text-secondary-400 mb-1.5 block";
-
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
@@ -94,38 +93,27 @@ export function CreateAssetSheet({
 
 					<div className="flex flex-col gap-4">
 						{/* Parent */}
-						<div>
-							<label className={labelClass}>{t("parent")}</label>
-							<select
-								value={parentId}
-								onChange={(e) => setParentId(e.target.value)}
-								disabled={isLoadingParents}
-								className={selectClass}
-							>
-								<option value="">{t("parentPlaceholder")}</option>
-								{assetParents.map((p: ParentListItem) => (
-									<option key={p.id} value={String(p.id)}>
-										{p.code} · {p.name}
-									</option>
-								))}
-							</select>
-						</div>
+						<AccountSelect
+							label={t("parent")}
+							value={parentId}
+							onChange={setParentId}
+							accounts={assetParents}
+							isLoading={isLoadingParents}
+							placeholder={t("parentPlaceholder")}
+							loadingText="Loading..."
+							grouped={false}
+						/>
 
 						{/* Name */}
-						<div>
-							<label className={labelClass}>{t("name")}</label>
-							<input
+						<AppField label={t("name")} hint={t("hints.autoCode")}>
+							<AppInput
 								type="text"
 								value={name}
 								maxLength={200}
 								onChange={(e) => setName(e.target.value)}
 								placeholder={t("namePlaceholder")}
-								className="w-full bg-secondary-50 border border-secondary-200 rounded-xl px-3.5 py-3 text-[13px] text-secondary-800 outline-none focus:border-primary-400 placeholder:text-secondary-300"
 							/>
-							<p className="text-[11px] text-secondary-400 mt-1.5">
-								{t("hints.autoCode")}
-							</p>
-						</div>
+						</AppField>
 
 						{/* Contextual hint */}
 						<div className="flex items-start gap-2 rounded-xl bg-info-50 px-3 py-2.5">
@@ -135,14 +123,13 @@ export function CreateAssetSheet({
 							</p>
 						</div>
 
-						<button
+						<AppSubmitButton
 							type="button"
 							onClick={handleSubmit}
 							disabled={isSubmitting}
-							className="w-full py-3.5 rounded-2xl bg-primary-500 text-white font-semibold text-[14px] shadow-[0_4px_20px_rgba(59,79,212,0.4)] active:scale-[0.98] transition-transform no-tap disabled:opacity-50"
 						>
 							{t("submit")}
-						</button>
+						</AppSubmitButton>
 					</div>
 				</div>
 			</SheetContent>
