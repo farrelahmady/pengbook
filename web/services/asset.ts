@@ -81,6 +81,20 @@ export const assetService = {
 	 * Server calculates delta and creates balanced journal entry.
 	 * POST /api/v1/accounts/assets/{id}/adjust-balance
 	 */
+	/**
+	 * Download the asset list as an Excel file.
+	 * Real API call to GET /api/v1/accounts/assets/export
+	 */
+	exportExcel: async (): Promise<Blob> => {
+		logger.debug("Downloading asset export");
+		const client = authHttpClient();
+		const res = await client.get(`${API_BASE}/export`, {
+			responseType: "blob",
+		});
+		logger.info("Asset export downloaded");
+		return res.data as Blob;
+	},
+
 	adjustBalance: async (
 		assetId: number,
 		balance: number,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -45,6 +46,33 @@ func (h *Handler) GetAssetGroups(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, groups)
+}
+
+// ExportAssetExcel handles GET /api/v1/accounts/assets/export
+// Generates an Excel file of the user's asset posting accounts ordered by
+// code, with group name and cached balance.
+func (h *Handler) ExportAssetExcel(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == 0 {
+		response.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	export, err := h.service.ExportAssetExcel(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to generate export")
+		return
+	}
+
+	// Filename date follows the client's timezone like the other exports.
+	filenameDate := time.Now().In(middleware.LocationFromContext(r.Context())).Format("2006-01-02")
+
+	// Set headers for Excel file download
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=aset-"+filenameDate+".xlsx")
+	w.Header().Set("Content-Length", strconv.Itoa(len(export)))
+
+	w.Write(export)
 }
 
 // CreateAsset handles POST /api/v1/accounts/assets
