@@ -5,6 +5,7 @@ import { useTransferManager } from "@/transfer/hooks/use-transfer-manager";
 import { createDownloadTask } from "@/transfer/task/download-task";
 import { httpClient } from "@/lib/http-client";
 import { createTransferFetch } from "@/transfer/core/transfer-fetch";
+import { AppSelect } from "@/components/ui/app-select";
 
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 B";
@@ -148,17 +149,16 @@ export function DownloadDemo() {
 			<div className="flex flex-col gap-3">
 				<div className="flex items-center gap-3">
 					<label className="text-sm font-medium w-20">File size:</label>
-					<select
-						value={fileSizeMB}
-						onChange={(e) => setFileSizeMB(Number(e.target.value))}
-						className="border rounded px-2 py-1 text-sm"
-					>
-						<option value={1}>1 MB</option>
-						<option value={5}>5 MB</option>
-						<option value={10}>10 MB</option>
-						<option value={50}>50 MB</option>
-						<option value={100}>100 MB</option>
-					</select>
+				<div className="w-40">
+					<AppSelect
+						value={String(fileSizeMB)}
+						onChange={(v) => setFileSizeMB(Number(v))}
+						options={[1, 5, 10, 50, 100].map((mb) => ({
+							value: String(mb),
+							label: `${mb} MB`,
+						}))}
+					/>
+				</div>
 				</div>
 				<div className="flex items-center gap-3">
 					<label className="text-sm font-medium w-20">Filename:</label>

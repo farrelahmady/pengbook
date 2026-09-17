@@ -11,6 +11,10 @@ import { JournalEntryListItem } from "@/types";
 import { dateInputToISO } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
 import { createLogger } from "@/lib/logger";
+import { AppField } from "@/components/ui/app-field";
+import { AppInput } from "@/components/ui/app-input";
+import { AppSubmitButton } from "@/components/ui/app-submit-button";
+import { AccountSelect } from "@/components/akun/account-select";
 
 const logger = createLogger("EditBasicForm");
 
@@ -86,53 +90,37 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 			});
 	}
 
-	const labelClass =
-		"text-[11px] font-semibold uppercase tracking-[0.5px] text-secondary-400 mb-1.5 block";
-	const inputClass =
-		"bg-secondary-50 border border-secondary-200 rounded-xl px-3.5 py-3 text-[13px] text-secondary-800 outline-none focus:border-primary-400 w-full";
-
 	return (
 		<div className="flex flex-col gap-4">
 			{/* Date */}
-			<div>
-				<label className={labelClass}>{t("date")}</label>
-				<input
+			<AppField label={t("date")}>
+				<AppInput
 					type="date"
 					value={date}
 					onChange={(e) => setDate(e.target.value)}
-					className={inputClass}
 				/>
-			</div>
+			</AppField>
 
 			{/* Description */}
-			<div>
-				<label className={labelClass}>{t("description")}</label>
-				<input
+			<AppField label={t("description")}>
+				<AppInput
 					type="text"
 					placeholder={t("descriptionPlaceholder")}
 					value={description}
 					onChange={(e) => setDesc(e.target.value)}
-					className={inputClass}
 				/>
-			</div>
+			</AppField>
 
 			{/* From Account */}
-			<div>
-				<label className={labelClass}>{t("fromAccount")}</label>
-				<select
-					value={fromAccount}
-					onChange={(e) => setFrom(e.target.value)}
-					className={`${inputClass} appearance-none`}
-					disabled={isLoadingAccounts}
-				>
-					<option value="">{isLoadingAccounts ? "Loading..." : t("fromPlaceholder")}</option>
-					{postingAccounts.map((a) => (
-						<option key={a.id} value={a.id}>
-							{a.code} · {a.name}
-						</option>
-					))}
-				</select>
-			</div>
+			<AccountSelect
+				label={t("fromAccount")}
+				value={fromAccount}
+				onChange={setFrom}
+				accounts={postingAccounts}
+				isLoading={isLoadingAccounts}
+				placeholder={t("fromPlaceholder")}
+				loadingText="Loading..."
+			/>
 
 			{/* Arrow */}
 			<div className="flex justify-center py-1">
@@ -142,34 +130,26 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 			</div>
 
 			{/* To Account */}
-			<div>
-				<label className={labelClass}>{t("toAccount")}</label>
-				<select
-					value={toAccount}
-					onChange={(e) => setTo(e.target.value)}
-					className={`${inputClass} appearance-none`}
-					disabled={isLoadingAccounts}
-				>
-					<option value="">{isLoadingAccounts ? "Loading..." : t("toPlaceholder")}</option>
-					{postingAccounts.map((a) => (
-						<option key={a.id} value={a.id}>
-							{a.code} · {a.name}
-						</option>
-					))}
-				</select>
-			</div>
+			<AccountSelect
+				label={t("toAccount")}
+				value={toAccount}
+				onChange={setTo}
+				accounts={postingAccounts}
+				isLoading={isLoadingAccounts}
+				placeholder={t("toPlaceholder")}
+				loadingText="Loading..."
+			/>
 
 			{/* Amount */}
-			<div>
-				<label className={labelClass}>{t("amount")}</label>
-				<input
+			<AppField label={t("amount")}>
+				<AppInput
 					type="number"
 					placeholder="0"
 					value={amount}
 					onChange={(e) => setAmount(e.target.value)}
-					className={`${inputClass} font-mono`}
+					className="font-mono"
 				/>
-			</div>
+			</AppField>
 
 			{/* Hint */}
 			<div className="bg-secondary-50 rounded-xl px-4 py-3 border border-secondary-100">
@@ -180,17 +160,14 @@ export function EditBasicForm({ journal, onSuccess }: EditBasicFormProps) {
 			</div>
 
 			{/* Submit */}
-			<button
+			<AppSubmitButton
+				variant="stateful"
+				ready={Boolean(date && fromAccount && toAccount && amount && !isSubmitting)}
 				onClick={handleSubmit}
 				disabled={!date || !fromAccount || !toAccount || !amount || isSubmitting}
-				className={`w-full font-semibold text-[15px] py-3.5 rounded-xl transition-all mt-1 ${
-					date && fromAccount && toAccount && amount && !isSubmitting
-						? "bg-primary-500 text-white active:scale-[0.98]"
-						: "bg-secondary-100 text-secondary-400 cursor-not-allowed"
-				}`}
 			>
 				{t("submit")}
-			</button>
+			</AppSubmitButton>
 		</div>
 	);
 }

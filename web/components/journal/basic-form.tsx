@@ -9,6 +9,10 @@ import { journalService } from "@/services/journal";
 import { accountService } from "@/services/account";
 import { dateInputToISO, parseDecimal, todayLocalDate } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
+import { AppField } from "@/components/ui/app-field";
+import { AppInput } from "@/components/ui/app-input";
+import { AppSubmitButton } from "@/components/ui/app-submit-button";
+import { AccountSelect } from "@/components/akun/account-select";
 
 interface BasicFormProps {
 	onSuccess: () => void;
@@ -30,16 +34,6 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
 			queryFn: () => accountService.getPostingAccounts(),
 		},
 	);
-
-	const groupedPostingAccounts = (() => {
-		const map = new Map<string, typeof postingAccounts>();
-		for (const p of postingAccounts) {
-			const list = map.get(p.type) ?? [];
-			list.push(p);
-			map.set(p.type, list);
-		}
-		return [...map.entries()];
-	})();
 
 	async function handleSubmit() {
 		if (!fromAccount || !toAccount || !amount) {
@@ -83,57 +77,37 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
 		}
 	}
 
-	const selectClass =
-		"w-full bg-secondary-50 border border-secondary-200 rounded-xl px-3.5 py-3 text-[13px] text-secondary-800 outline-none focus:border-primary-400 appearance-none cursor-pointer";
-	const labelClass =
-		"text-[11px] font-semibold uppercase tracking-[0.5px] text-secondary-400 mb-1.5 block";
-
 	return (
 		<div className="flex flex-col gap-4">
 			{/* Date */}
-			<div>
-				<label className={labelClass}>{t("date")}</label>
-				<input
+			<AppField label={t("date")}>
+				<AppInput
 					type="date"
 					value={date}
 					onChange={(e) => setDate(e.target.value)}
-					className={selectClass}
 				/>
-			</div>
+			</AppField>
 
 			{/* Description */}
-			<div>
-				<label className={labelClass}>{t("description")}</label>
-				<input
+			<AppField label={t("description")}>
+				<AppInput
 					type="text"
 					placeholder={t("descriptionPlaceholder")}
 					value={description}
 					onChange={(e) => setDesc(e.target.value)}
-					className={selectClass}
 				/>
-			</div>
+			</AppField>
 
 			{/* From */}
-			<div>
-				<label className={labelClass}>{t("fromAccount")}</label>
-				<select
-					value={fromAccount}
-					onChange={(e) => setFrom(e.target.value)}
-					className={selectClass}
-					disabled={isLoadingAccounts}
-				>
-					<option value="">{t("fromPlaceholder")}</option>
-					{groupedPostingAccounts.map(([type, list]) => (
-						<optgroup key={type} label={type}>
-							{list.map((p) => (
-								<option key={p.id} value={String(p.id)}>
-									{p.code} · {p.name}
-								</option>
-							))}
-						</optgroup>
-					))}
-				</select>
-			</div>
+			<AccountSelect
+				label={t("fromAccount")}
+				value={fromAccount}
+				onChange={setFrom}
+				accounts={postingAccounts}
+				isLoading={isLoadingAccounts}
+				placeholder={t("fromPlaceholder")}
+				loadingText="Loading..."
+			/>
 
 			{/* Arrow visual */}
 			<div className="flex items-center gap-3 -my-1">
@@ -145,41 +119,31 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
 			</div>
 
 			{/* To */}
-			<div>
-				<label className={labelClass}>{t("toAccount")}</label>
-				<select
-					value={toAccount}
-					onChange={(e) => setTo(e.target.value)}
-					className={selectClass}
-					disabled={isLoadingAccounts}
-				>
-					<option value="">
-						{isLoadingAccounts ? "Loading..." : t("toPlaceholder")}
-					</option>
-					{postingAccounts.map((a) => (
-						<option key={a.id} value={a.id}>
-							{a.code} · {a.name}
-						</option>
-					))}
-				</select>
-			</div>
+			<AccountSelect
+				label={t("toAccount")}
+				value={toAccount}
+				onChange={setTo}
+				accounts={postingAccounts}
+				isLoading={isLoadingAccounts}
+				placeholder={t("toPlaceholder")}
+				loadingText="Loading..."
+			/>
 
 			{/* Amount */}
-			<div>
-				<label className={labelClass}>{t("amount")}</label>
+			<AppField label={t("amount")}>
 				<div className="relative">
 					<span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-[13px] text-secondary-400">
 						Rp
 					</span>
-					<input
+					<AppInput
 						type="number"
 						placeholder="0"
 						value={amount}
 						onChange={(e) => setAmount(e.target.value)}
-						className={`${selectClass} pl-10 font-mono text-[16px]`}
+						className="pl-10 font-mono text-[16px]"
 					/>
 				</div>
-			</div>
+			</AppField>
 
 			{/* Auto hint */}
 			<div className="bg-primary-50 rounded-xl px-3.5 py-3 text-[12px] text-primary-700 leading-relaxed">
@@ -189,14 +153,13 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
 			</div>
 
 			{/* Submit */}
-			<button
+			<AppSubmitButton
+				variant="form"
 				onClick={handleSubmit}
 				disabled={isSubmitting}
-				className="w-full bg-primary-500 text-white font-semibold text-[15px] py-3.5 rounded-xl
-                   active:scale-[0.98] transition-transform mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
 			>
 				{t("submit")}
-			</button>
+			</AppSubmitButton>
 		</div>
 	);
 }

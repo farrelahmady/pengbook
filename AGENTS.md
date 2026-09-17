@@ -269,6 +269,20 @@ Selain rules di atas, ikuti **Global Engineering Principles** dari opencode:
 
 ---
 
+## Commit Message
+
+- Setiap sesi/chat **boleh** memberikan rekomendasi commit message — baik diminta
+  user maupun proaktif di akhir pekerjaan.
+- Rekomendasi **wajib berbasis current changes** (`git status` / `git diff`),
+  bukan dari memori atau ringkasan sesi.
+- Ikuti gaya repo: `<tipe>(<scope>): <ringkasan>` satu baris (contoh:
+  `refactor(web): ...`, `feat(akun): ...`), plus body opsional berisi daftar
+  perubahan dan file yang terdampak.
+- Rekomendasi ≠ eksekusi: **jangan `commit`, `push`, atau buat PR** tanpa
+  instruksi eksplisit dari user.
+
+---
+
 ## Tech Stack Reference
 
 | Layer | Technology | Location |
