@@ -27,6 +27,9 @@ var (
 	ErrParentIsPosting = errors.New("posting accounts cannot have children")
 	ErrCodeExhausted   = errors.New("no more codes available under this parent")
 	ErrInvalidLevel    = errors.New("level must be between 0 and 2")
+	ErrParentNotAsset  = errors.New("parent account must be an ASSET type")
+	ErrParentNotLevel2 = errors.New("asset can only be created under a level-2 ASSET account")
+	ErrAssetNotPosting = errors.New("adjust-balance is only allowed on asset posting accounts (level 3)")
 )
 
 // Service is the PORT (interface) for account business logic.
@@ -38,7 +41,7 @@ type Service interface {
 	GetTree(ctx context.Context, userID int64) (*AccountTree, error)
 
 	// GetParents returns candidate parents at the given level (0-2) for a user.
-	GetParents(ctx context.Context, userID int64, level int8) ([]ParentListItem, error)
+	GetParents(ctx context.Context, userID int64, req ParentsRequest) ([]ParentListItem, error)
 
 	// SeedRoots creates the six fixed level-0 roots for a user (idempotent).
 	SeedRoots(ctx context.Context, userID int64) error
@@ -55,17 +58,33 @@ type Service interface {
 	// GetPostingAccounts returns all posting accounts (level=3) for a user.
 	GetPostingAccounts(ctx context.Context, userID int64) ([]PostingAccountResponse, error)
 
+	// GetAssetSummary returns the lightweight Asset aggregates for a user.
+	GetAssetSummary(ctx context.Context, userID int64) (*AssetSummary, error)
+
+	// GetAssetGroups returns asset posting accounts grouped under their
+	// level-2 ancestor, with per-group totals.
+	GetAssetGroups(ctx context.Context, userID int64) (*AssetGroups, error)
+
 	// ExportExcel returns the user's accounts as an Excel file ordered by code.
 	ExportExcel(ctx context.Context, userID int64) ([]byte, error)
+
+	// CreateAsset creates a new asset posting account under an ASSET level-2 parent.
+	// Balance starts at 0; use AdjustAssetBalance to set the opening balance.
+	CreateAsset(ctx context.Context, userID int64, req CreateAssetRequest) (*AccountResponse, error)
+
+	// AdjustAssetBalance adjusts the balance of an asset posting account via a
+	// balanced journal entry against the reclass adjustment account (6.01.01.01).
+	AdjustAssetBalance(ctx context.Context, userID int64, assetID int64, req AdjustBalanceRequest) (*AdjustBalanceResponse, error)
 }
 
 type service struct {
-	repo Repository
-	tx   database.TxManager
+	repo        Repository
+	journalRepo JournalMutator
+	tx          database.TxManager
 }
 
-func NewService(repo Repository, tx database.TxManager) Service {
-	return &service{repo: repo, tx: tx}
+func NewService(repo Repository, journalRepo JournalMutator, tx database.TxManager) Service {
+	return &service{repo: repo, journalRepo: journalRepo, tx: tx}
 }
 
 func (s *service) GetSummary(ctx context.Context, userID int64) (*AccountSummary, error) {
@@ -213,12 +232,12 @@ func (s *service) nextChildCode(ctx context.Context, userID int64, parent *Accou
 	return strings.Join(segs, "."), nil
 }
 
-func (s *service) GetParents(ctx context.Context, userID int64, level int8) ([]ParentListItem, error) {
-	if level < 0 || level > 2 {
+func (s *service) GetParents(ctx context.Context, userID int64, req ParentsRequest) ([]ParentListItem, error) {
+	if req.Level < 0 || req.Level > 2 {
 		return nil, ErrInvalidLevel
 	}
 
-	accounts, err := s.repo.FindByLevel(ctx, userID, level)
+	accounts, err := s.repo.FindByLevelAndType(ctx, userID, req.Level, req.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -337,6 +356,7 @@ func (s *service) GetPostingAccounts(ctx context.Context, userID int64) ([]Posti
 			ID:   a.ID,
 			Code: a.Code,
 			Name: a.Name,
+			Type: string(a.Type),
 		}
 	}
 	return result, nil

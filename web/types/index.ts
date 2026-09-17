@@ -146,12 +146,13 @@ export interface PostingAccount {
 	id: number;
 	code: string;
 	name: string;
+	type: string;
 }
 
 export type JournalMode = "basic" | "advanced";
 export type NavTab = "jurnal" | "aset" | "laporan" | "akun";
 
-// Asset
+// Asset (halaman Aset — kontrak mirror DTO Go di account/asset_dto.go)
 export interface AssetAccount {
 	id: number;
 	code: string;
@@ -164,15 +165,33 @@ export interface AssetGroup {
 	id: number;
 	code: string;
 	name: string;
-	icon: string;
 	accounts: AssetAccount[];
 	totalBalance: number;
 }
 
+// Ringan (untuk Topbar) — GET /api/v1/accounts/assets/summary
 export interface AssetSummary {
 	totalAsset: number;
 	currentAsset: number;
+	accountCount: number;
+}
+
+// Berat (untuk List) — GET /api/v1/accounts/assets/groups
+export interface AssetGroups {
 	groups: AssetGroup[];
+}
+
+// Account response (mirror of Go AccountResponse)
+export interface AccountResponse {
+	id: number;
+	code: string;
+	name: string;
+	type: string;
+	level: number;
+	isPosting: boolean;
+	parentId: number | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
 // Report

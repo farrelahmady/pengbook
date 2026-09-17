@@ -277,7 +277,7 @@
 	/* Section label */
 	.section-label {
 		@apply text-[11px] font-semibold tracking-[0.8px]
-           uppercase text-secondary-400 px-4 pb-2 pt-1;
+           uppercase text-secondary-400 px-4 py-2;
 	}
 
 	/* Card default */

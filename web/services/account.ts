@@ -59,14 +59,23 @@ export const accountService = {
 	 * Get candidate parents at the given parent level (0-2) for account creation.
 	 * Real API call to GET /api/v1/accounts/parents?level=N
 	 */
-	getParents: async (level: number): Promise<ParentListItem[]> => {
+	getParents: async (
+		level: number,
+		type?: string,
+	): Promise<ParentListItem[]> => {
 		logger.debug("Fetching parent accounts", { level });
+
+		const params = new URLSearchParams();
+		params.set("level", String(level));
+		if (type) params.set(type, type);
+
 		const client = authHttpClient();
 		const res = await client.get<ApiResponse<ParentListItem[]>>(
-			`${API_BASE}/accounts/parents?level=${level}`,
+			`${API_BASE}/accounts/parents?${params}`,
 		);
 		logger.info("Parent accounts fetched", {
 			level,
+			type,
 			count: res.data.data.length,
 		});
 		return res.data.data;
@@ -77,7 +86,10 @@ export const accountService = {
 	 * Real API call to POST /api/v1/accounts
 	 */
 	create: async (dto: CreateAccountDto): Promise<Account> => {
-		logger.debug("Creating account", { name: dto.name, parentId: dto.parentId });
+		logger.debug("Creating account", {
+			name: dto.name,
+			parentId: dto.parentId,
+		});
 		const client = authHttpClient();
 		const res = await client.post<ApiResponse<Account>>(
 			`${API_BASE}/accounts`,

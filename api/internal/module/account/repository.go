@@ -46,9 +46,9 @@ type Repository interface {
 	// FindPostingByUserID returns all posting accounts (level=3) for the given user.
 	FindPostingByUserID(ctx context.Context, userID int64) ([]Account, error)
 
-	// FindByLevel returns all accounts of the given user at the given level,
+	// FindByLevelAndType returns all accounts of the given user at the given level and type if exists,
 	// ordered by code. Used to list candidate parents for account creation.
-	FindByLevel(ctx context.Context, userID int64, level int8) ([]Account, error)
+	FindByLevelAndType(ctx context.Context, userID int64, vel int8, typeAccount string) ([]Account, error)
 
 	// FindMaxChildCode returns the highest child code of the given parent.
 	// Returns ("", false, nil) when the parent has no children yet.
@@ -61,4 +61,15 @@ type Repository interface {
 	// EnsureBalance creates the zero balance row for an Asset posting account.
 	// Idempotent: an existing row is left untouched.
 	EnsureBalance(ctx context.Context, accountID int64) error
+
+	// FindAssetWithBalances returns all ASSET accounts of the given user
+	// with their cached balance (COALESCE to 0 when the balance row is
+	// missing), ordered by code. Used by the Asset page (summary + groups).
+	FindAssetWithBalances(ctx context.Context, userID int64) ([]AssetBalanceRow, error)
+}
+
+// AssetBalanceRow is one ASSET account row joined with its cached balance.
+type AssetBalanceRow struct {
+	Account Account
+	Balance float64
 }

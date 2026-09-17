@@ -145,10 +145,68 @@
 		},
 		"summaryCurrentAsset": {
 			"label": "Aset Lancar",
-			"sub": "Kas + Bank"
+			"sub": "Kode akun: 1.01.xx.xx"
 		},
 		"emptyTitle": "Belum ada aset",
-		"emptyDescription": "Tambahkan akun aset untuk mulai melacak kekayaan Anda."
+		"emptyDescription": "Tambahkan akun aset untuk mulai melacak kekayaan Anda.",
+		"expandAll": "Buka semua",
+		"collapseAll": "Tutup semua",
+		"error": {
+			"title": "Gagal memuat aset",
+			"description": "Periksa koneksi Anda lalu coba lagi.",
+			"retry": "Coba lagi"
+		},
+		"search": {
+			"placeholder": "Cari kode atau nama aset...",
+			"clear": "Hapus",
+			"resultCount": "{count} hasil untuk '{query}'",
+			"emptyTitle": "Tidak ada aset yang cocok",
+			"emptyDescription": "Coba kata kunci lain atau hapus pencarian."
+		},
+		"groupSubtitle": "{count} sub-akun",
+		"badge": {
+			"posting": "Posting"
+		},
+		"subtotalLabel": "Subtotal debit bersih",
+		"subtotalValue": "DR {value}",
+		"optionMenu": {
+			"rename": "Ubah Nama",
+			"adjustBalance": "Sesuaikan Saldo"
+		},
+		"create": {
+			"title": "Tambah Aset",
+			"parent": "Kelompok Aset",
+			"parentPlaceholder": "Pilih kelompok",
+			"name": "Nama Akun",
+			"namePlaceholder": "cth. Mandiri - Utama",
+			"submit": "Simpan",
+			"hints": {
+				"autoCode": "Kode akun dibuat otomatis mengikuti kelompok.",
+				"assetPosting": "Aset posting digunakan untuk mencatat saldo. Saldo awal Rp0 — isi melalui penyesuaian."
+			},
+			"toastLoading": "Menyimpan aset...",
+			"toastSuccess": "Aset {code} berhasil dibuat",
+			"toastError": "Gagal membuat aset",
+			"toastValidation": "Lengkapi kelompok dan nama aset",
+			"fab": "Tambah Aset"
+		},
+		"adjustBalance": {
+			"title": "Sesuaikan Saldo",
+			"currentBalance": "Saldo Saat Ini",
+			"desiredBalance": "Saldo Akhir",
+			"note": "Catatan",
+			"notePlaceholder": "cth. Setoran awal",
+			"date": "Tanggal",
+			"optional": "opsional",
+			"submit": "Simpan",
+			"hints": {
+				"info": "Masukkan saldo akhir yang diinginkan. Perubahan akan dicatat sebagai jurnal penyeimbang terhadap akun Penyesuaian Reklassifikasi (6.01.01.01)."
+			},
+			"toastLoading": "Menyesuaikan saldo...",
+			"toastSuccess": "Saldo disesuaikan menjadi Rp{balance}",
+			"toastError": "Gagal menyesuaikan saldo",
+			"toastValidation": "Saldo akhir harus 0 atau lebih"
+		}
 	},
 	"reportPage": {
 		"title": "Laporan Keuangan",

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -264,15 +266,23 @@ func (r *accountRepository) FindPostingByUserID(ctx context.Context, userID int6
 	return accounts, rows.Err()
 }
 
-const findByLevelQuery = `
+func (r *accountRepository) FindByLevelAndType(ctx context.Context, userID int64, level int8, typeAccount string) ([]account.Account, error) {
+	where := []string{"user_id = $1", "level = $2"}
+	args := []interface{}{userID, level}
+
+	if typeAccount != "" {
+		where = append(where, "type = $3")
+		args = append(args, typeAccount)
+	}
+
+	query := fmt.Sprintf(`
 	SELECT id, user_id, code, name, type, level, parent_id, created_at, updated_at
 	FROM accounts
-	WHERE user_id = $1 AND level = $2
+	WHERE %s
 	ORDER BY code
-`
+`, strings.Join(where, " AND "))
 
-func (r *accountRepository) FindByLevel(ctx context.Context, userID int64, level int8) ([]account.Account, error) {
-	rows, err := r.db(ctx).Query(ctx, findByLevelQuery, userID, level)
+	rows, err := r.db(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -331,4 +341,36 @@ const ensureBalanceQuery = `
 func (r *accountRepository) EnsureBalance(ctx context.Context, accountID int64) error {
 	_, err := r.db(ctx).Exec(ctx, ensureBalanceQuery, accountID)
 	return err
+}
+
+const findAssetWithBalancesQuery = `
+	SELECT a.id, a.user_id, a.code, a.name, a.type, a.level, a.parent_id,
+		a.created_at, a.updated_at, COALESCE(b.balance, 0)
+	FROM accounts a
+	LEFT JOIN account_balances b ON b.account_id = a.id
+	WHERE a.user_id = $1 AND a.type = 'ASSET'
+	ORDER BY a.code
+`
+
+func (r *accountRepository) FindAssetWithBalances(ctx context.Context, userID int64) ([]account.AssetBalanceRow, error) {
+	log := logger.FromContext(ctx)
+	rows, err := r.db(ctx).Query(ctx, findAssetWithBalancesQuery, userID)
+	if err != nil {
+		log.Error("repo: failed to find asset with balances", "user_id", userID, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []account.AssetBalanceRow
+	for rows.Next() {
+		var row account.AssetBalanceRow
+		if err := rows.Scan(&row.Account.ID, &row.Account.UserID, &row.Account.Code,
+			&row.Account.Name, &row.Account.Type, &row.Account.Level, &row.Account.ParentID,
+			&row.Account.CreatedAt, &row.Account.UpdatedAt, &row.Balance); err != nil {
+			log.Error("repo: failed to scan asset with balance", "error", err)
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
 }

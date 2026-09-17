@@ -7,54 +7,40 @@ import { useTranslations } from "next-intl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { accountService } from "@/services/account";
+import { assetService } from "@/services/asset";
 import { createLogger } from "@/lib/logger";
 import { queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
+import type { ParentListItem } from "@/types";
 
-const logger = createLogger("account.create-sheet");
+const logger = createLogger("asset.create-sheet");
 
-interface CreateAccountSheetProps {
+interface CreateAssetSheetProps {
 	open: boolean;
 	onOpenChange: (v: boolean) => void;
 }
 
-const LEVELS = [1, 2, 3] as const;
-
-export function CreateAccountSheet({
+export function CreateAssetSheet({
 	open,
 	onOpenChange,
-}: CreateAccountSheetProps) {
-	const t = useTranslations("accountPage.create");
+}: CreateAssetSheetProps) {
+	const t = useTranslations("assetPage.create");
 	const queryClient = useQueryClient();
-	const [level, setLevel] = useState<number>(3);
 	const [parentId, setParentId] = useState("");
 	const [name, setName] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const type = "ASSET";
 
+	// Fetch level-2 ASSET parents only
 	const { data: parents = [], isLoading: isLoadingParents } = useQuery({
-		queryKey: queryKeys.accounts.parents(level - 1),
-		queryFn: () => accountService.getParents(level - 1),
+		queryKey: queryKeys.accounts.parentsWithType(2, type), // level 2 for getting level-2 children
+		queryFn: () => accountService.getParents(2, type),
 		enabled: open,
 	});
 
-	const groupedParents = (() => {
-		const map = new Map<string, typeof parents>();
-		for (const p of parents) {
-			const list = map.get(p.type) ?? [];
-			list.push(p);
-			map.set(p.type, list);
-		}
-		return [...map.entries()];
-	})();
-
-	function handleLevelChange(v: number) {
-		setLevel(v);
-		setParentId("");
-		logger.debug("Create level changed", { level: v });
-	}
-
-	const selectedParent = parents.find((p) => String(p.id) === parentId);
-	const showAssetHint = level === 3 && selectedParent?.type === "ASSET";
+	// Filter to only ASSET type level-2 parents
+	const assetParents = parents.filter(
+		(p: ParentListItem) => p.type === "ASSET" && p.level === 2,
+	);
 
 	async function handleSubmit() {
 		if (!parentId || !name.trim()) {
@@ -64,22 +50,23 @@ export function CreateAccountSheet({
 
 		const toastId = toast.loading(t("toastLoading"));
 		setIsSubmitting(true);
-		logger.debug("Creating account", { level, parentId, name });
+		logger.debug("Creating asset", { parentId, name });
 
 		try {
-			const created = await accountService.create({
-				name: name.trim(),
-				parentId: Number(parentId),
-			});
+			const created = await assetService.create(Number(parentId), name.trim());
 
 			toast.success(t("toastSuccess", { code: created.code }), { id: toastId });
-			logger.info("Account created", { id: created.id, code: created.code });
+			logger.info("Asset created", { id: created.id, code: created.code });
+
+			// Invalidate asset queries and account queries (CoA changed)
+			queryClient.invalidateQueries({ queryKey: queryKeys.assets.all });
 			queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all });
+
 			setParentId("");
 			setName("");
 			onOpenChange(false);
 		} catch (err) {
-			logger.error("Failed to create account", { error: err });
+			logger.error("Failed to create asset", { error: err });
 			toast.error(t("toastError"), { id: toastId });
 		} finally {
 			setIsSubmitting(false);
@@ -106,28 +93,6 @@ export function CreateAccountSheet({
 					</h2>
 
 					<div className="flex flex-col gap-4">
-						{/* Level */}
-						<div>
-							<label className={labelClass}>{t("level")}</label>
-							<div className="flex bg-secondary-100 rounded-xl p-1 gap-1">
-								{LEVELS.map((l) => (
-									<button
-										key={l}
-										type="button"
-										onClick={() => handleLevelChange(l)}
-										className={cn(
-											"flex-1 py-2 rounded-lg text-[13px] font-semibold transition-all no-tap",
-											level === l
-												? "bg-white text-secondary-900 shadow-sm"
-												: "text-secondary-400 hover:text-secondary-600",
-										)}
-									>
-										{t(`level${l}`)}
-									</button>
-								))}
-							</div>
-						</div>
-
 						{/* Parent */}
 						<div>
 							<label className={labelClass}>{t("parent")}</label>
@@ -138,14 +103,10 @@ export function CreateAccountSheet({
 								className={selectClass}
 							>
 								<option value="">{t("parentPlaceholder")}</option>
-								{groupedParents.map(([type, list]) => (
-									<optgroup key={type} label={type}>
-										{list.map((p) => (
-											<option key={p.id} value={String(p.id)}>
-												{p.code} · {p.name}
-											</option>
-										))}
-									</optgroup>
+								{assetParents.map((p: ParentListItem) => (
+									<option key={p.id} value={String(p.id)}>
+										{p.code} · {p.name}
+									</option>
 								))}
 							</select>
 						</div>
@@ -170,8 +131,7 @@ export function CreateAccountSheet({
 						<div className="flex items-start gap-2 rounded-xl bg-info-50 px-3 py-2.5">
 							<Info size={14} className="text-info-600 shrink-0 mt-[1px]" />
 							<p className="text-[12px] leading-snug text-info-700">
-								{level < 3 ? t("hints.header") : t("hints.posting")}
-								{showAssetHint && ` ${t("hints.assetBalance")}`}
+								{t("hints.assetPosting")}
 							</p>
 						</div>
 

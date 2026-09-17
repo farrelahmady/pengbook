@@ -31,6 +31,16 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
 		},
 	);
 
+	const groupedPostingAccounts = (() => {
+		const map = new Map<string, typeof postingAccounts>();
+		for (const p of postingAccounts) {
+			const list = map.get(p.type) ?? [];
+			list.push(p);
+			map.set(p.type, list);
+		}
+		return [...map.entries()];
+	})();
+
 	async function handleSubmit() {
 		if (!fromAccount || !toAccount || !amount) {
 			toast.error(t("toastValidation"));
@@ -112,13 +122,15 @@ export function BasicForm({ onSuccess }: BasicFormProps) {
 					className={selectClass}
 					disabled={isLoadingAccounts}
 				>
-					<option value="">
-						{isLoadingAccounts ? "Loading..." : t("fromPlaceholder")}
-					</option>
-					{postingAccounts.map((a) => (
-						<option key={a.id} value={a.id}>
-							{a.code} · {a.name}
-						</option>
+					<option value="">{t("fromPlaceholder")}</option>
+					{groupedPostingAccounts.map(([type, list]) => (
+						<optgroup key={type} label={type}>
+							{list.map((p) => (
+								<option key={p.id} value={String(p.id)}>
+									{p.code} · {p.name}
+								</option>
+							))}
+						</optgroup>
 					))}
 				</select>
 			</div>

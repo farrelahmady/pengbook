@@ -30,11 +30,30 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/tree", h.GetTree)
 	r.Get("/parents", h.GetParents)
 	r.Get("/posting", h.GetPostingAccounts)
+	r.Get("/assets/summary", h.GetAssetSummary)
+	r.Get("/assets/groups", h.GetAssetGroups)
+	r.Post("/assets", h.CreateAsset)
+	r.Post("/assets/{id}/adjust-balance", h.AdjustAssetBalance)
 	r.Get("/export", h.ExportExcel)
 	r.Post("/", h.Create)
 	r.Put("/{id}", h.Update)
 	r.Delete("/{id}", h.Delete)
 	return r
+}
+
+func parseParentsRequest(r *http.Request) (ParentsRequest, error) {
+	level, err := strconv.Atoi(r.URL.Query().Get("level"))
+
+	if err != nil || level < 0 || level > 2 {
+		return ParentsRequest{}, ErrInvalidLevel
+	}
+
+	typeAcc := r.URL.Query().Get("type")
+
+	return ParentsRequest{
+		Level: int8(level),
+		Type:  typeAcc,
+	}, nil
 }
 
 // GetSummary handles GET /api/v1/accounts/summary
@@ -79,13 +98,13 @@ func (h *Handler) GetParents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	level, err := strconv.Atoi(r.URL.Query().Get("level"))
-	if err != nil || level < 0 || level > 2 {
-		response.Error(w, http.StatusBadRequest, "level must be between 0 and 2")
+	reqParam, err := parseParentsRequest(r)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	parents, err := h.service.GetParents(r.Context(), userID, int8(level))
+	parents, err := h.service.GetParents(r.Context(), userID, reqParam)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to get parent accounts")
 		return

@@ -300,8 +300,8 @@ func (r *journalRepository) FindEntriesByUserIDWithNetEffect(ctx context.Context
 			e.id,
 			e.datetime,
 			e.description,
-			COALESCE(SUM(CASE WHEN a.type = 'ASSET' THEN l.debit ELSE 0 END), 0) -
-			COALESCE(SUM(CASE WHEN a.type = 'ASSET' THEN l.credit ELSE 0 END), 0) AS net_effect
+			COALESCE(SUM(CASE WHEN a.code ILIKE '1.01%%' THEN l.debit ELSE 0 END), 0) -
+			COALESCE(SUM(CASE WHEN a.code ILIKE '1.01%%' THEN l.credit ELSE 0 END), 0) AS net_effect
 		FROM journal_entries e
 		LEFT JOIN journal_entry_lines l ON l.journal_entry_id = e.id
 		LEFT JOIN accounts a ON a.id = l.account_id

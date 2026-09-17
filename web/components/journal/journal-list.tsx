@@ -47,6 +47,16 @@ export default function JournalList({
 		},
 	);
 
+	const groupedPostingAccounts = (() => {
+		const map = new Map<string, typeof postingAccounts>();
+		for (const p of postingAccounts) {
+			const list = map.get(p.type) ?? [];
+			list.push(p);
+			map.set(p.type, list);
+		}
+		return [...map.entries()];
+	})();
+
 	const hasCustomDate = dateFrom || dateTo;
 	const hasAccountFilter = selectedAccountIds.length > 0;
 
@@ -170,56 +180,58 @@ export default function JournalList({
 							</p>
 						) : (
 							<div className="flex flex-col gap-1">
-								{postingAccounts.map((account) => {
-									const id = account.id.toString();
-									const isSelected = selectedAccountIds.includes(id);
-									return (
-										<button
-											key={account.id}
-											onClick={() => onToggleAccount(id)}
-											className={[
-												"flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
-												isSelected
-													? "bg-primary-50 border border-primary-200"
-													: "hover:bg-secondary-50 border border-transparent",
-											].join(" ")}
-										>
-											<div
-												className={[
-													"w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
-													isSelected
-														? "bg-primary-500 border-primary-500"
-														: "border-secondary-300",
-												].join(" ")}
-											>
-												{isSelected && (
-													<svg
-														width="10"
-														height="8"
-														viewBox="0 0 10 8"
-														fill="none"
+								{groupedPostingAccounts.map(([type, list]) => (
+									<div className="w-full" key={type}>
+										<p className="text-sm font-medium border-b my-1">{type}</p>
+										{list.map((account) => {
+											const id = account.id.toString();
+											const isSelected = selectedAccountIds.includes(id);
+											return (
+												<button
+													key={account.id}
+													onClick={() => onToggleAccount(id)}
+													className={[
+														" w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
+														isSelected
+															? "bg-primary-50 border border-primary-200"
+															: "hover:bg-secondary-50 border border-transparent",
+													].join(" ")}
+												>
+													<div
+														className={[
+															"w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+															isSelected
+																? "bg-primary-500 border-primary-500"
+																: "border-secondary-300",
+														].join(" ")}
 													>
-														<path
-															d="M1 4L3.5 6.5L9 1"
-															stroke="white"
-															strokeWidth="2"
-															strokeLinecap="round"
-															strokeLinejoin="round"
-														/>
-													</svg>
-												)}
-											</div>
-											<div className="flex-1 min-w-0">
-												<p className="text-[12px] font-medium text-secondary-700 truncate">
-													{account.name}
-												</p>
-												<p className="font-mono text-[10px] text-secondary-400">
-													{account.code}
-												</p>
-											</div>
-										</button>
-									);
-								})}
+														{isSelected && (
+															<svg
+																width="10"
+																height="8"
+																viewBox="0 0 10 8"
+																fill="none"
+															>
+																<path
+																	d="M1 4L3.5 6.5L9 1"
+																	stroke="white"
+																	strokeWidth="2"
+																	strokeLinecap="round"
+																	strokeLinejoin="round"
+																/>
+															</svg>
+														)}
+													</div>
+													<div className="flex-1 min-w-0">
+														<p className="text-[12px] text-secondary-700 truncate">
+															{account.code} · {account.name}
+														</p>
+													</div>
+												</button>
+											);
+										})}
+									</div>
+								))}
 							</div>
 						)}
 					</div>
