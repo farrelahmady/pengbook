@@ -206,6 +206,12 @@
 			"toastSuccess": "Saldo disesuaikan menjadi Rp{balance}",
 			"toastError": "Gagal menyesuaikan saldo",
 			"toastValidation": "Saldo akhir harus 0 atau lebih"
+		},
+		"export": {
+			"button": "Download Daftar Aset",
+			"toastLoading": "Mendownload daftar aset...",
+			"toastSuccess": "Daftar aset berhasil didownload",
+			"toastError": "Gagal mendownload daftar aset"
 		}
 	},
 	"reportPage": {

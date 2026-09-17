@@ -68,6 +68,10 @@ type Service interface {
 	// ExportExcel returns the user's accounts as an Excel file ordered by code.
 	ExportExcel(ctx context.Context, userID int64) ([]byte, error)
 
+	// ExportAssetExcel returns the user's asset posting accounts as an
+	// Excel file ordered by code, with cached balances.
+	ExportAssetExcel(ctx context.Context, userID int64) ([]byte, error)
+
 	// CreateAsset creates a new asset posting account under an ASSET level-2 parent.
 	// Balance starts at 0; use AdjustAssetBalance to set the opening balance.
 	CreateAsset(ctx context.Context, userID int64, req CreateAssetRequest) (*AccountResponse, error)

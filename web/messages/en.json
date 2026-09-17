@@ -206,6 +206,12 @@
 			"toastSuccess": "Balance adjusted to Rp{balance}",
 			"toastError": "Failed to adjust balance",
 			"toastValidation": "Desired balance must be 0 or greater"
+		},
+		"export": {
+			"button": "Download Asset List",
+			"toastLoading": "Downloading asset list...",
+			"toastSuccess": "Asset list downloaded successfully",
+			"toastError": "Failed to download asset list"
 		}
 	},
 	"reportPage": {

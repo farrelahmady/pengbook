@@ -32,6 +32,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/posting", h.GetPostingAccounts)
 	r.Get("/assets/summary", h.GetAssetSummary)
 	r.Get("/assets/groups", h.GetAssetGroups)
+	r.Get("/assets/export", h.ExportAssetExcel)
 	r.Post("/assets", h.CreateAsset)
 	r.Post("/assets/{id}/adjust-balance", h.AdjustAssetBalance)
 	r.Get("/export", h.ExportExcel)

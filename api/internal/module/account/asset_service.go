@@ -67,6 +67,29 @@ func (s *service) GetAssetGroups(ctx context.Context, userID int64) (*AssetGroup
 	return &AssetGroups{Groups: groups}, nil
 }
 
+// ExportAssetExcel generates an Excel export of the user's asset posting
+// accounts (flat rows ordered by code, with group name and cached balance).
+func (s *service) ExportAssetExcel(ctx context.Context, userID int64) ([]byte, error) {
+	log := logger.FromContext(ctx)
+
+	rows, err := s.repo.FindAssetWithBalances(ctx, userID)
+	if err != nil {
+		log.Error("asset export: failed to find assets", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	groups := buildAssetGroups(rows)
+
+	exported, err := GenerateAssetExport(groups)
+	if err != nil {
+		log.Error("asset export: failed to generate export", "user_id", userID, "error", err)
+		return nil, err
+	}
+
+	log.Info("asset export generated", "user_id", userID, "group_count", len(groups))
+	return exported, nil
+}
+
 // summarizeAssetRows aggregates posting balances from asset rows.
 // Pure function (no I/O) so it is unit-testable.
 func summarizeAssetRows(rows []AssetBalanceRow) AssetSummary {
