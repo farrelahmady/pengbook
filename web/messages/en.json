@@ -145,7 +145,7 @@
 		},
 		"summaryCurrentAsset": {
 			"label": "Current Assets",
-			"sub": "Cash + Bank"
+			"sub": "Account code: 1.01.xx.xx"
 		},
 		"emptyTitle": "No assets yet",
 		"emptyDescription": "Add asset accounts to start tracking your wealth.",

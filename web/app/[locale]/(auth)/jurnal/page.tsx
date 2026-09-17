@@ -1,5 +1,5 @@
-import CreateJournal from "./create-journal";
-import JurnalPageContent from "./jurnal-page-content";
+import CreateJournal from "@/components/journal/create-journal";
+import JurnalPageContent from "@/components/journal/jurnal-page-content";
 
 export default async function JurnalPage() {
 	return (

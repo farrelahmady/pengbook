@@ -145,7 +145,7 @@
 		},
 		"summaryCurrentAsset": {
 			"label": "Aset Lancar",
-			"sub": "Kas + Bank"
+			"sub": "Kode akun: 1.01.xx.xx"
 		},
 		"emptyTitle": "Belum ada aset",
 		"emptyDescription": "Tambahkan akun aset untuk mulai melacak kekayaan Anda.",
